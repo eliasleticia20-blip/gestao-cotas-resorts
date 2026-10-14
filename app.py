@@ -13,12 +13,31 @@ import calendar
 import pandas as pd
 import streamlit as st
 
+# Ícones vetoriais discretos para os componentes HTML do painel.
+_ICON_PATHS = {
+    "calendar": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+    "check": '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/>',
+    "link": '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/>',
+    "building": '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+    "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    "waves": '<path d="M2 8c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2M2 14c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/>',
+}
+
+
+def icone(nome, tamanho=24, cor="currentColor"):
+    caminho = _ICON_PATHS.get(nome, _ICON_PATHS["waves"])
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{int(tamanho)}" '
+            f'height="{int(tamanho)}" viewBox="0 0 24 24" fill="none" '
+            f'stroke="{cor}" stroke-width="1.8" stroke-linecap="round" '
+            f'stroke-linejoin="round" aria-hidden="true">{caminho}</svg>')
+
+
 # ------------------------------------------------------------
 # CONFIGURACAO
 # ------------------------------------------------------------
 st.set_page_config(
     page_title="Salinas Resorts | Gestão de Cotas",
-    page_icon="🏖️",
+    page_icon=":material/beach_access:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -334,7 +353,7 @@ st.markdown(
         background: #1766b5; box-shadow: 0 5px 18px rgba(0,0,0,.16);
     }
     .side-brand { text-align:center; padding: 26px 4px 20px; }
-    .side-symbol { font-size: 2.4rem; line-height: 1.2; }
+    .side-symbol { line-height: 1.2; display:flex; justify-content:center; margin-bottom:12px; }
     .side-name { font-size: 1.8rem; letter-spacing: .11em; font-weight: 800; color: #fff; }
     .side-small { font-size: .73rem; letter-spacing: .38em; color:#e9c99c; }
     .side-caption { font-size: .67rem; letter-spacing: .21em; color: #b4cbe5; margin-top: 12px; }
@@ -349,7 +368,7 @@ st.markdown(
         padding:18px 19px; box-shadow:0 6px 24px rgba(18,44,80,.045); min-height:108px; }
     .dash-card .label { color:#71829b; font-size:.81rem; margin-bottom:7px; }
     .dash-card .value { font-size:1.9rem; color:#102d52; font-weight:800; line-height:1.1; }
-    .dash-card .glyph { float:right; font-size:1.6rem; opacity:.8; }
+    .dash-card .glyph { float:right; display:inline-flex; opacity:.85; }
     .home-panel { background:white; border:1px solid #e1e9f3; border-radius:16px;
         padding:19px; margin: 5px 0 15px; box-shadow:0 6px 22px rgba(18,44,80,.04); }
     .calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:5px; }
@@ -364,6 +383,12 @@ st.markdown(
     .booking-status { font-size:.73rem; font-weight:700; color:#147b58; }
     .resort-row { padding:11px 0; border-bottom:1px solid #eef2f6; font-size:.87rem; }
     .resort-row:last-child { border-bottom:0; }
+    .dashboard-title svg, .result-title svg { vertical-align:-4px; margin-right:7px; color:#1769aa; }
+    .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:3px; }
+    .booked-dot { background:#d95b65; } .pending-dot { background:#d6a04c; } .today-dot { background:#2276cc; }
+    [data-testid="stSidebar"] [role="radiogroup"] label { border-left:2px solid transparent; }
+    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) { border-left-color:#d9bb80; }
+    
     .resort-name { font-weight:700; color:#17395c; }
     .resort-meta { color:#78889a; font-size:.77rem; }
     @media(max-width:700px){ .hero {padding:34px 22px;min-height:260px;} .home-panel {padding:14px;} }
@@ -460,18 +485,18 @@ total_resorts_com_dados = sum(bool(abas) for abas in base_dados.values())
 # MENU LATERAL
 # ------------------------------------------------------------
 with st.sidebar:
-    st.markdown('<div class="side-brand"><div class="side-symbol">🌴</div><div class="side-name">SALINAS</div><div class="side-small">R E S O R T S</div><div class="side-caption">GESTÃO DE COTAS</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="side-brand"><div class="side-symbol">{icone("waves", 45, "#d9bb80")}</div><div class="side-name">SALINAS</div><div class="side-small">R E S O R T S</div><div class="side-caption">GESTÃO DE COTAS</div></div>', unsafe_allow_html=True)
     st.markdown("---")
     menu = st.radio(
         "MENU PRINCIPAL",
-        ["🏠 Início", "🔎 Consultar cotas", "📋 Gerenciar Reservas", "📅 Cronogramas", "⚙️ Cadastros"],
+        ["Início", "Consultar cotas", "Gerenciar Reservas", "Cronogramas", "Cadastros"],
         label_visibility="visible",
         key="menu_principal",
     )
     st.markdown("---")
     st.caption("Painel administrativo")
     st.caption("Consulta de períodos e cotas")
-    if st.button("🔄 Atualizar planilhas", use_container_width=True):
+    if st.button("Atualizar planilhas", icon=":material/refresh:", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
@@ -522,7 +547,7 @@ def situacao_cota(item, registros):
 # ------------------------------------------------------------
 # PAINEL INICIAL - dados reais das planilhas e do Supabase
 # ------------------------------------------------------------
-if menu == "🏠 Início":
+if menu == "Início":
     st.markdown("""
     <div class="hero">
       <div class="home-eyebrow">GESTÃO DE COTAS E ESTADIAS</div>
@@ -547,23 +572,23 @@ if menu == "🏠 Início":
     pendentes = sum(r.get("status") == "pendente" and not r.get("expirado") for r in registros_inicio)
     canceladas = sum(r.get("status") == "cancelado" for r in registros_inicio)
     metricas = [
-        ("Períodos nas planilhas", str(total_periodos), "📅"),
-        ("Reservas confirmadas", str(confirmadas) if not erro_inicio else "—", "✅"),
-        ("Links pendentes", str(pendentes) if not erro_inicio else "—", "🔗"),
-        ("Resorts com dados", str(total_resorts_com_dados), "🏨"),
+        ("Períodos nas planilhas", str(total_periodos), "calendar"),
+        ("Reservas confirmadas", str(confirmadas) if not erro_inicio else "—", "check"),
+        ("Links pendentes", str(pendentes) if not erro_inicio else "—", "link"),
+        ("Resorts com dados", str(total_resorts_com_dados), "building"),
     ]
     for col, (rotulo, valor, simbolo) in zip(st.columns(4), metricas):
         with col:
-            st.markdown(f'<div class="dash-card"><span class="glyph">{simbolo}</span><div class="label">{rotulo}</div><div class="value">{valor}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="dash-card"><span class="glyph">{icone(simbolo, 27, "#1769aa")}</span><div class="label">{rotulo}</div><div class="value">{valor}</div></div>', unsafe_allow_html=True)
 
     st.markdown('<div class="dashboard-title">Planeje sua próxima estadia</div><div class="dashboard-sub">Acesse a consulta para encontrar períodos e gerar links de reserva.</div>', unsafe_allow_html=True)
     def abrir_consulta():
-        st.session_state["menu_principal"] = "🔎 Consultar cotas"
-    st.button("🔎 Consultar períodos disponíveis", type="primary", use_container_width=True, on_click=abrir_consulta)
+        st.session_state["menu_principal"] = "Consultar cotas"
+    st.button("Consultar períodos disponíveis", icon=":material/search:", type="primary", use_container_width=True, on_click=abrir_consulta)
 
     painel_cal, painel_res, painel_hot = st.columns([1.12, 1, 1])
     with painel_cal:
-        st.markdown('<div class="dashboard-title">📅 Calendário de reservas</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="dashboard-title">{icone("calendar", 20)} Calendário de reservas</div>', unsafe_allow_html=True)
         hoje = date.today()
         mes_inicio = date(hoje.year, hoje.month, 1)
         mes_ref = st.date_input("Mês de referência", value=mes_inicio, format="DD/MM/YYYY", key="calendario_inicio")
@@ -588,9 +613,9 @@ if menu == "🏠 Início":
                 else:
                     classes = 'calendar-day' + (' booked' if dia in ocupados else ' pending' if dia in aguardando else '') + (' today' if (ano, mes, dia) == (hoje.year, hoje.month, hoje.day) else '')
                     dias_html += f'<div class="{classes}">{dia}</div>'
-        st.markdown(f'<div class="home-panel"><strong>{nomes_meses[mes]} de {ano}</strong><div style="height:12px"></div><div class="calendar-grid">{dias_html}</div><div style="margin-top:14px;color:#708198;font-size:.75rem">🔴 Há reserva &nbsp; 🟠 Há link pendente &nbsp; 🔵 Hoje</div><div style="margin-top:6px;color:#8593a4;font-size:.72rem">Datas sem marcação não garantem disponibilidade; consulte cada cota.</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="home-panel"><strong>{nomes_meses[mes]} de {ano}</strong><div style="height:12px"></div><div class="calendar-grid">{dias_html}</div><div style="margin-top:14px;color:#708198;font-size:.75rem"><span class="legend-dot booked-dot"></span> Há reserva &nbsp; <span class="legend-dot pending-dot"></span> Há link pendente &nbsp; <span class="legend-dot today-dot"></span> Hoje</div><div style="margin-top:6px;color:#8593a4;font-size:.72rem">Datas sem marcação não garantem disponibilidade; consulte cada cota.</div></div>', unsafe_allow_html=True)
     with painel_res:
-        st.markdown('<div class="dashboard-title">🕒 Próximas reservas</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="dashboard-title">{icone("clock", 20)} Próximas reservas</div>', unsafe_allow_html=True)
         proximas = []
         for reg in registros_inicio:
             entrada = converter_data_reserva(reg.get("checkin"))
@@ -607,7 +632,7 @@ if menu == "🏠 Início":
             linhas = '<div class="dashboard-sub">Nenhuma próxima reserva encontrada.</div>'
         st.markdown(f'<div class="home-panel">{linhas}</div>', unsafe_allow_html=True)
     with painel_hot:
-        st.markdown('<div class="dashboard-title">🏨 Resorts cadastrados</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="dashboard-title">{icone("building", 20)} Resorts cadastrados</div>', unsafe_allow_html=True)
         linhas = ''
         for resort, abas in base_dados.items():
             qtd = sum(len(df) for df in abas.values())
@@ -618,7 +643,7 @@ if menu == "🏠 Início":
 # ------------------------------------------------------------
 # CONSULTA
 # ------------------------------------------------------------
-elif menu == "🔎 Consultar cotas":
+elif menu == "Consultar cotas":
     st.markdown('<div class="section-heading">Planeje sua próxima estadia</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-subtitle">Escolha seu resort, selecione as datas e descubra os períodos cadastrados para sua viagem.</div>',
@@ -643,7 +668,7 @@ elif menu == "🔎 Consultar cotas":
         with col_out:
             data_saida = st.date_input("Check-out", value=date.today(), format="DD/MM/YYYY")
 
-        buscar = st.button("🔎  Buscar cotas no período", type="primary", use_container_width=True)
+        buscar = st.button("Buscar cotas no período", icon=":material/search:", type="primary", use_container_width=True)
 
     if buscar:
         st.session_state["busca_ativa"] = True
@@ -740,20 +765,21 @@ elif menu == "🔎 Consultar cotas":
                         )
                         with topo_nome:
                             st.markdown(
-                                f"<div class='result-title'>🏨 {html.escape(str(item['resort']))}</div>"
+                                f"<div class='result-title'>{icone('building', 19)} {html.escape(str(item['resort']))}</div>"
                                 f"<p class='result-subtitle'>Cota {html.escape(str(item['cota']))}</p>",
                                 unsafe_allow_html=True,
                             )
                         with topo_status:
                             if disponivel:
-                                st.success("🟢 Disponível")
+                                st.success("Disponível")
                             elif situacao == "Reservada":
-                                st.error("🔒 Reservada")
+                                st.error("Reservada")
                             else:
-                                st.warning(f"🔒 {situacao}")
+                                st.warning(f"{situacao}")
                         with topo_botao:
                             if st.button(
-                                "📅 Reservar para cliente" if disponivel else "🔒 Indisponível para reserva",
+                                "Reservar para cliente" if disponivel else "Indisponível para reserva",
+                                 icon=":material/event_available:" if disponivel else ":material/lock:",
                                 key=f"reservar_{indice}_{item['resort']}_{item['cota']}_{item['entrada']}_{item['saida']}",
                                 use_container_width=True,
                                 disabled=not disponivel,
@@ -820,11 +846,11 @@ elif menu == "🔎 Consultar cotas":
 # ------------------------------------------------------------
 # GERENCIAR RESERVAS (acesso somente ao administrador autenticado)
 # ------------------------------------------------------------
-elif menu == "📋 Gerenciar Reservas":
+elif menu == "Gerenciar Reservas":
     st.markdown('<div class="section-heading">Gerenciar Reservas</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-subtitle">Consulte links e reservas, cancele registros ou exclua definitivamente reservas já canceladas.</div>', unsafe_allow_html=True)
 
-    if st.button("🔄 Atualizar lista de reservas", use_container_width=False):
+    if st.button("Atualizar lista de reservas", icon=":material/refresh:", use_container_width=False):
         st.rerun()
 
     try:
@@ -887,7 +913,7 @@ elif menu == "📋 Gerenciar Reservas":
                     except RuntimeError as erro:
                         st.error(f"Não foi possível cancelar: {erro}")
             elif r.get("status") == "cancelado":
-                with st.expander("🗑️ Excluir definitivamente esta reserva"):
+                with st.expander("Excluir definitivamente esta reserva"):
                     st.warning("Esta ação é irreversível. A reserva, o pré-check-in e os dados dos acompanhantes serão apagados do banco de dados. Não afeta registros da GAV.")
                     texto_confirmacao = st.text_input(
                         "Para confirmar, digite EXCLUIR",
@@ -913,7 +939,7 @@ elif menu == "📋 Gerenciar Reservas":
 # ------------------------------------------------------------
 # CRONOGRAMAS
 # ------------------------------------------------------------
-elif menu == "📅 Cronogramas":
+elif menu == "Cronogramas":
     st.markdown('<div class="section-heading">Cronogramas dos resorts</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-subtitle">Consulte os dados importados dos arquivos Excel.</div>', unsafe_allow_html=True)
 
@@ -935,7 +961,8 @@ elif menu == "📅 Cronogramas":
         st.caption(f"{len(df_exibir)} linha(s) exibida(s) • Aba: {aba_bruta}")
         st.dataframe(df_exibir, use_container_width=True, hide_index=True)
         st.download_button(
-            "⬇️ Baixar esta tabela em CSV",
+            "Baixar esta tabela em CSV",
+            icon=":material/download:",
             data=df_exibir.to_csv(index=False).encode("utf-8-sig"),
             file_name=f"{resort_bruto}_{aba_bruta}.csv".replace("/", "-"),
             mime="text/csv",
@@ -946,7 +973,7 @@ elif menu == "📅 Cronogramas":
 # ------------------------------------------------------------
 # CADASTROS
 # ------------------------------------------------------------
-elif menu == "⚙️ Cadastros":
+elif menu == "Cadastros":
     st.markdown('<div class="section-heading">Cadastro de cotistas</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-subtitle">Área preparada para organizar os dados de contato dos cotistas.</div>',
