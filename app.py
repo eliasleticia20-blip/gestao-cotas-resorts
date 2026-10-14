@@ -1,5 +1,12 @@
 import os
 import html
+import json
+import hmac
+import re
+import uuid
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from datetime import date, datetime
 
 import pandas as pd
@@ -21,6 +28,111 @@ ARQUIVOS_RESORTS = {
     "Park Resort": "Salinas Park Resort.xlsx",
     "Premium Resort": "Salinas Premium Resort.xlsx",
 }
+
+# A chave secreta fica exclusivamente no servidor Streamlit.
+def config_segura(nome):
+    return st.secrets.get(nome, os.getenv(nome, ""))
+
+
+def chamar_supabase(funcao, dados):
+    url = config_segura("SUPABASE_URL").rstrip("/")
+    chave = config_segura("SUPABASE_KEY")
+    if not url or not chave or "COLE_AQUI" in chave:
+        raise RuntimeError("Configure SUPABASE_URL e SUPABASE_KEY nos Secrets do Streamlit.")
+    req = Request(
+        f"{url}/rest/v1/rpc/{funcao}",
+        data=json.dumps(dados).encode("utf-8"),
+        headers={"apikey": chave, "Authorization": f"Bearer {chave}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=20) as resposta:
+            return json.loads(resposta.read().decode("utf-8"))
+    except HTTPError as erro:
+        try:
+            detalhe = json.loads(erro.read().decode("utf-8")).get("message", "Erro no banco de dados")
+        except Exception:
+            detalhe = "Erro no banco de dados"
+        raise RuntimeError(detalhe) from erro
+    except URLError as erro:
+        raise RuntimeError("Não foi possível conectar ao Supabase.") from erro
+
+
+def validar_cpf(cpf):
+    digitos = re.sub(r"\D", "", cpf)
+    if len(digitos) != 11 or len(set(digitos)) == 1:
+        return False
+    for tamanho in (9, 10):
+        resto = (sum(int(digitos[i]) * (tamanho + 1 - i) for i in range(tamanho)) * 10) % 11
+        if (0 if resto == 10 else resto) != int(digitos[tamanho]):
+            return False
+    return True
+
+
+def tela_cliente(token):
+    st.title("Confirmação de reserva | Salinas Resorts")
+    try:
+        reserva = chamar_supabase("consultar_link_reserva", {"p_token": str(uuid.UUID(token))})
+    except (ValueError, RuntimeError) as erro:
+        st.error(f"Não foi possível consultar o link: {erro}")
+        st.stop()
+    if not reserva.get("valido"):
+        st.warning("Este link é inválido, expirou ou já foi utilizado.")
+        st.stop()
+    st.info(f"{reserva['resort']} | Cota {reserva['cota']} | {reserva['checkin']} a {reserva['checkout']}")
+    st.caption("O envio confirma a reserva automaticamente, sujeito à disponibilidade no momento da confirmação.")
+    with st.form("confirmacao_cliente"):
+        nome = st.text_input("Nome completo do hóspede principal")
+        cpf = st.text_input("CPF do hóspede principal")
+        whatsapp = st.text_input("WhatsApp com DDD")
+        email = st.text_input("E-mail")
+        qtd = st.number_input("Quantidade de acompanhantes", 0, 7, 0, 1)
+        acompanhantes = []
+        for i in range(int(qtd)):
+            st.markdown(f"**Acompanhante {i + 1}**")
+            acompanhantes.append({"nome": st.text_input("Nome completo", key=f"nome_ac_{i}"), "cpf": st.text_input("CPF (se possuir)", key=f"cpf_ac_{i}")})
+        st.markdown("**Termos da reserva (versão v1-2026-10)**")
+        st.write("Confira resort, cota, datas e dados antes de confirmar. A confirmação deste formulário registra a solicitação no sistema. Condições de pagamento, alteração e cancelamento devem constar do acordo fornecido pelo responsável pela reserva.")
+        aceite = st.checkbox("Li e aceito os termos apresentados e autorizo o tratamento dos dados informados para organizar a hospedagem.")
+        enviar = st.form_submit_button("Confirmar reserva", type="primary", use_container_width=True)
+    if enviar:
+        if not aceite:
+            st.error("É necessário aceitar os termos.")
+        elif not nome.strip() or not validar_cpf(cpf) or not re.fullmatch(r"\d{10,13}", re.sub(r"\D", "", whatsapp)) or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()):
+            st.error("Confira nome, CPF, WhatsApp e e-mail.")
+        elif any(not a["nome"].strip() or (a["cpf"].strip() and not validar_cpf(a["cpf"])) for a in acompanhantes):
+            st.error("Confira os dados dos acompanhantes.")
+        else:
+            try:
+                resposta = chamar_supabase("confirmar_reserva_cliente", {"p_token": token, "p_nome": nome, "p_cpf": re.sub(r"\D", "", cpf), "p_whatsapp": re.sub(r"\D", "", whatsapp), "p_email": email.strip(), "p_versao_termo": "v1-2026-10", "p_acompanhantes": acompanhantes})
+                st.success(f"Reserva confirmada! {resposta['resort']} — cota {resposta['cota']} — {resposta['checkin']} a {resposta['checkout']}.")
+                st.balloons()
+            except RuntimeError as erro:
+                st.error(f"Reserva não confirmada: {erro}")
+    st.stop()
+
+
+# O link do cliente não dá acesso ao painel administrativo.
+_token_cliente = st.query_params.get("reserva")
+if _token_cliente:
+    tela_cliente(_token_cliente)
+
+senha_admin = config_segura("ADMIN_PASSWORD")
+if not senha_admin:
+    st.error("Configure ADMIN_PASSWORD nos Secrets antes de disponibilizar o painel administrativo.")
+    st.stop()
+if not st.session_state.get("admin_autenticado", False):
+    st.title("Acesso administrativo")
+    with st.form("login_admin"):
+        senha_digitada = st.text_input("Senha de administrador", type="password")
+        entrar = st.form_submit_button("Entrar")
+    if entrar:
+        if hmac.compare_digest(senha_digitada, senha_admin):
+            st.session_state["admin_autenticado"] = True
+            st.rerun()
+        else:
+            st.error("Senha incorreta")
+    st.stop()
 
 # ------------------------------------------------------------
 # ESTILO VISUAL
@@ -392,6 +504,7 @@ if menu == "🔎 Consultar cotas":
                                 use_container_width=True,
                             ):
                                 st.session_state["cota_selecionada"] = item
+                                st.session_state.pop("link_gerado", None)
 
                         st.markdown(
                             f"""
@@ -417,11 +530,20 @@ if menu == "🔎 Consultar cotas":
                         )
 
                         if st.session_state.get("cota_selecionada") == item:
-                            st.info(
-                                "Cota selecionada para pré-reserva. O botão já está funcionando. "
-                                "Na próxima etapa vamos gerar um link individual e conectar o formulário seguro do cliente. "
-                                "Nenhuma reserva foi registrada ainda."
-                            )
+                            st.caption("Crie um link exclusivo para o cliente. O link expira em 48 horas.")
+                            if st.button("Gerar link de reserva", key=f"link_{indice}", type="primary"):
+                                try:
+                                    token = chamar_supabase("criar_link_reserva", {
+                                        "p_resort": item["resort"], "p_cota": item["cota"],
+                                        "p_checkin": datetime.strptime(item["entrada"], "%d/%m/%Y").date().isoformat(),
+                                        "p_checkout": datetime.strptime(item["saida"], "%d/%m/%Y").date().isoformat(),
+                                    })
+                                    st.session_state["link_gerado"] = f"{config_segura('APP_URL').rstrip('/')}?{urlencode({'reserva': token})}"
+                                except RuntimeError as erro:
+                                    st.error(f"Não foi possível gerar o link: {erro}")
+                            if st.session_state.get("link_gerado"):
+                                st.code(st.session_state["link_gerado"], language=None)
+                                st.caption("Copie e envie ao cliente pelo WhatsApp.")
             else:
                 st.markdown(
                     """
