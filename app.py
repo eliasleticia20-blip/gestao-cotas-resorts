@@ -61,24 +61,22 @@ st.markdown(
         color: #c7d9ec; font-weight: 700; margin-bottom: .55rem;
     }
     .hero {
-        background: linear-gradient(118deg, #0d2748 0%, #164777 65%, #21628f 100%);
-        color: white; border-radius: 22px; padding: 30px 34px;
+        background-color: #143e62;
+        background-image: linear-gradient(90deg, rgba(8,34,54,.91) 0%, rgba(8,34,54,.70) 48%, rgba(8,34,54,.16) 100%),
+          url('https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1800&q=85');
+        background-size: cover; background-position: center 55%;
+        color: white; border-radius: 22px; padding: 65px 42px;
         box-shadow: 0 16px 38px rgba(16,45,82,.16);
         margin-bottom: 25px; position: relative; overflow: hidden;
-    }
-    .hero:after {
-        content: ""; position: absolute; width: 270px; height: 270px;
-        border: 1px solid rgba(255,255,255,.13); border-radius: 50%;
-        right: -65px; top: -120px; box-shadow: 0 0 0 28px rgba(255,255,255,.035),
-        0 0 0 58px rgba(255,255,255,.025);
+        min-height: 350px; display: flex; flex-direction: column; justify-content: center;
     }
     .hero h1 {
-        font-family: 'Playfair Display', serif; font-size: clamp(1.8rem, 3vw, 2.6rem);
+        font-family: 'Playfair Display', serif; font-size: clamp(2.4rem, 4.5vw, 4.2rem);
         line-height: 1.15; margin: 0 0 10px 0; color: #fff;
     }
-    .hero p { margin: 0; color: #e0ebf6; font-size: 1rem; max-width: 720px; }
+    .hero p { margin: 0; color: #f0f5f8; font-size: 1.05rem; max-width: 610px; line-height: 1.7; }
     .hero-tag {
-        display: inline-block; border: 1px solid rgba(255,255,255,.28);
+        display: inline-block; align-self: flex-start; border: 1px solid rgba(255,255,255,.48);
         border-radius: 999px; padding: 6px 12px; margin-bottom: 16px;
         color: #eaf3fb; font-size: .75rem; letter-spacing: .06em;
     }
@@ -131,7 +129,7 @@ st.markdown(
     [data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
     @media (max-width: 700px) {
         .block-container { padding-left: 1rem; padding-right: 1rem; }
-        .hero { padding: 23px 20px; border-radius: 17px; }
+        .hero { padding: 40px 22px; min-height: 310px; border-radius: 17px; background-position: 60% center; }
         .result-details { grid-template-columns: 1fr; }
         .result-top { display: block; }
         .status-pill { margin-top: 10px; }
@@ -251,10 +249,10 @@ with st.sidebar:
 st.markdown(
     """
     <div class="hero">
-        <div class="brand-eyebrow">Hospitalidade • Planejamento • Organização</div>
-        <div class="hero-tag">PAINEL ADMINISTRATIVO</div>
+        <div class="brand-eyebrow">Sua próxima experiência começa aqui</div>
+        <div class="hero-tag">GESTÃO DE COTAS E ESTADIAS</div>
         <h1>Salinas Resorts</h1>
-        <p>Gestão de cotas e consulta de períodos em um só lugar. Encontre as informações das planilhas com mais clareza e agilidade.</p>
+        <p>O seu refúgio no litoral paraense. Explore os períodos cadastrados e organize cada estadia com conforto e praticidade.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -271,9 +269,9 @@ if avisos_arquivos:
 # CONSULTA
 # ------------------------------------------------------------
 if menu == "🔎 Consultar cotas":
-    st.markdown('<div class="section-heading">Encontre sua estadia</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Planeje sua próxima estadia</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-subtitle">Selecione o resort e informe as datas para consultar os períodos registrados nas planilhas.</div>',
+        '<div class="section-subtitle">Escolha seu resort, selecione as datas e descubra os períodos cadastrados para sua viagem.</div>',
         unsafe_allow_html=True,
     )
 
