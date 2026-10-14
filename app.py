@@ -81,12 +81,13 @@ def tela_cliente(token):
         st.stop()
     st.info(f"{reserva['resort']} | Cota {reserva['cota']} | {reserva['checkin']} a {reserva['checkout']}")
     st.caption("O envio confirma a reserva automaticamente, sujeito à disponibilidade no momento da confirmação.")
+    # Fora do formulario para que os campos sejam atualizados ao clicar em + ou -.
+    qtd = st.number_input("Quantidade de acompanhantes", min_value=0, max_value=7, value=0, step=1, key="qtd_acompanhantes")
     with st.form("confirmacao_cliente"):
         nome = st.text_input("Nome completo do hóspede principal")
         cpf = st.text_input("CPF do hóspede principal")
         whatsapp = st.text_input("WhatsApp com DDD")
         email = st.text_input("E-mail")
-        qtd = st.number_input("Quantidade de acompanhantes", 0, 7, 0, 1)
         acompanhantes = []
         for i in range(int(qtd)):
             st.markdown(f"**Acompanhante {i + 1}**")
