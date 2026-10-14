@@ -1,194 +1,475 @@
-import streamlit as st
-import pandas as pd
 import os
-from datetime import datetime
+from datetime import date, datetime
 
-# Configuração da página
+import pandas as pd
+import streamlit as st
+
+# ------------------------------------------------------------
+# CONFIGURACAO
+# ------------------------------------------------------------
 st.set_page_config(
-    page_title="Gestão de Cotas - Salinas Resorts",
+    page_title="Salinas Resorts | Gestão de Cotas",
     page_icon="🏖️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-# Estilização visual moderna
-st.markdown("""
+ARQUIVOS_RESORTS = {
+    "Beach Resort": "Salinas Beach Resort.xlsx",
+    "Exclusive Resort": "Salinas Exclusive Resort.xlsx",
+    "Park Resort": "Salinas Park Resort.xlsx",
+    "Premium Resort": "Salinas Premium Resort.xlsx",
+}
+
+# ------------------------------------------------------------
+# ESTILO VISUAL
+# ------------------------------------------------------------
+st.markdown(
+    """
     <style>
-    .main { background-color: #f4f6f9; }
-    .welcome-box { background: linear-gradient(135deg, #0b2545 0%, #134074 100%); color: white; padding: 25px; border-radius: 15px; margin-bottom: 20px; }
-    .card { background-color: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 5px solid #134074; }
-    </style>
-""", unsafe_allow_html=True)
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
 
-# Função altamente resiliente para carregar os 4 arquivos Excel
-@st.cache_data
-def carregar_todos_os_dados():
-    arquivos = {
-        "Beach Resort": "Salinas Beach Resort.xlsx",
-        "Exclusive Resort": "Salinas Exclusive Resort.xlsx",
-        "Park Resort": "Salinas Park Resort.xlsx",
-        "Premium Resort": "Salinas Premium Resort.xlsx"
+    :root {
+        --navy: #102d52;
+        --navy-2: #174779;
+        --blue: #1769aa;
+        --sky: #eaf3fb;
+        --ink: #1d2b3a;
+        --muted: #667789;
+        --line: #dfe7ef;
+        --surface: #ffffff;
+        --bg: #f4f7fb;
     }
-    
+
+    html, body, [class*="css"] {
+        font-family: 'DM Sans', sans-serif;
+    }
+
+    .stApp { background: var(--bg); }
+    [data-testid="stHeader"] { background: rgba(244,247,251,0.92); }
+    .block-container { padding-top: 1.5rem; padding-bottom: 3rem; max-width: 1500px; }
+
+    [data-testid="stSidebar"] {
+        background: #102d52;
+        border-right: 1px solid rgba(255,255,255,0.08);
+    }
+    [data-testid="stSidebar"] * { color: #f5f8fc !important; }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color: #d9e6f3 !important; }
+
+    .brand-eyebrow {
+        text-transform: uppercase; letter-spacing: .18em; font-size: .72rem;
+        color: #c7d9ec; font-weight: 700; margin-bottom: .55rem;
+    }
+    .hero {
+        background: linear-gradient(118deg, #0d2748 0%, #164777 65%, #21628f 100%);
+        color: white; border-radius: 22px; padding: 30px 34px;
+        box-shadow: 0 16px 38px rgba(16,45,82,.16);
+        margin-bottom: 25px; position: relative; overflow: hidden;
+    }
+    .hero:after {
+        content: ""; position: absolute; width: 270px; height: 270px;
+        border: 1px solid rgba(255,255,255,.13); border-radius: 50%;
+        right: -65px; top: -120px; box-shadow: 0 0 0 28px rgba(255,255,255,.035),
+        0 0 0 58px rgba(255,255,255,.025);
+    }
+    .hero h1 {
+        font-family: 'Playfair Display', serif; font-size: clamp(1.8rem, 3vw, 2.6rem);
+        line-height: 1.15; margin: 0 0 10px 0; color: #fff;
+    }
+    .hero p { margin: 0; color: #e0ebf6; font-size: 1rem; max-width: 720px; }
+    .hero-tag {
+        display: inline-block; border: 1px solid rgba(255,255,255,.28);
+        border-radius: 999px; padding: 6px 12px; margin-bottom: 16px;
+        color: #eaf3fb; font-size: .75rem; letter-spacing: .06em;
+    }
+    .section-heading { color: var(--ink); font-size: 1.35rem; font-weight: 700; margin: 8px 0 4px 0; }
+    .section-subtitle { color: var(--muted); margin: 0 0 18px 0; font-size: .93rem; }
+    .panel {
+        background: white; border: 1px solid var(--line); border-radius: 18px;
+        padding: 22px 24px; margin: 10px 0 22px 0;
+        box-shadow: 0 5px 18px rgba(20,50,80,.035);
+    }
+    .metric-card {
+        background: white; border: 1px solid var(--line); border-radius: 16px;
+        padding: 17px 19px; min-height: 100px;
+    }
+    .metric-label { color: var(--muted); font-size: .8rem; margin-bottom: 7px; }
+    .metric-value { color: var(--navy); font-size: 1.65rem; font-weight: 700; line-height: 1.2; }
+    .result-card {
+        background: #fff; border: 1px solid #e0e8f0; border-radius: 17px;
+        padding: 20px 22px; margin: 12px 0;
+        box-shadow: 0 6px 20px rgba(18,48,78,.045);
+    }
+    .result-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .result-title { color: var(--navy); font-weight: 700; font-size: 1.1rem; margin: 0 0 5px 0; }
+    .result-subtitle { color: var(--muted); font-size: .88rem; margin: 0; }
+    .status-pill {
+        display: inline-block; white-space: nowrap; border-radius: 999px;
+        background: #e8f6ef; color: #16734b; font-weight: 700;
+        padding: 6px 10px; font-size: .75rem;
+    }
+    .result-details {
+        display: grid; grid-template-columns: repeat(3, minmax(0,1fr));
+        gap: 12px; margin-top: 18px;
+    }
+    .detail-box { background: #f6f9fc; border-radius: 11px; padding: 11px 13px; }
+    .detail-label { color: #6c7d8e; font-size: .73rem; margin-bottom: 4px; }
+    .detail-value { color: #203b57; font-weight: 600; font-size: .9rem; overflow-wrap: anywhere; }
+    .empty-state {
+        background: white; border: 1px dashed #c9d7e5; border-radius: 16px;
+        padding: 28px; text-align: center; color: var(--muted); margin-top: 12px;
+    }
+    div.stButton > button[kind="primary"] {
+        background: #1769aa; border: 1px solid #1769aa; border-radius: 10px;
+        min-height: 3rem; font-weight: 700; letter-spacing: .01em;
+        box-shadow: 0 5px 12px rgba(23,105,170,.15);
+    }
+    div.stButton > button[kind="primary"]:hover { background: #12568e; border-color: #12568e; }
+    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div {
+        border-radius: 10px !important; border-color: #d6e0e9 !important;
+    }
+    [data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    @media (max-width: 700px) {
+        .block-container { padding-left: 1rem; padding-right: 1rem; }
+        .hero { padding: 23px 20px; border-radius: 17px; }
+        .result-details { grid-template-columns: 1fr; }
+        .result-top { display: block; }
+        .status-pill { margin-top: 10px; }
+        .panel { padding: 17px; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ------------------------------------------------------------
+# LEITURA DOS EXCEL
+# ------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def carregar_todos_os_dados():
     dados_consolidados = {}
-    
-    for nome_resort, arquivo in arquivos.items():
-        if os.path.exists(arquivo):
-            try:
-                abas = pd.read_excel(arquivo, sheet_name=None)
-                abas_validas = {}
-                
-                for aba_nome, df in abas.items():
-                    # Tenta achar a linha de cabeçalho correta baseada em palavras-chave
-                    linha_cabecalho = None
-                    for idx, row in df.iterrows():
-                        row_str = row.astype(str).str.upper()
-                        if row_str.str.contains('CHECK|COTA|UNIDADE|DATA|202').any():
-                            linha_cabecalho = idx
-                            break
-                    
-                    if linha_cabecalho is None and len(df) > 2:
-                        linha_cabecalho = 2
-                        
-                    # Recarrega o DataFrame com o cabeçalho correto
-                    df_tratado = pd.read_excel(arquivo, sheet_name=aba_nome, header=linha_cabecalho)
-                    df_tratado = df_tratado.dropna(how='all')
-                    
-                    if not df_tratado.empty:
-                        # Garante que a primeira coluna (Cota) seja preenchida para baixo (ffill)
-                        primeira_coluna = df_tratado.columns[0]
-                        df_tratado[primeira_coluna] = df_tratado[primeira_coluna].ffill()
-                        abas_validas[aba_nome] = df_tratado
-                        
-                dados_consolidados[nome_resort] = abas_validas
-            except Exception as e:
-                dados_consolidados[nome_resort] = {}
-        else:
+    avisos = []
+
+    for nome_resort, arquivo in ARQUIVOS_RESORTS.items():
+        if not os.path.exists(arquivo):
             dados_consolidados[nome_resort] = {}
-            
-    return dados_consolidados
+            avisos.append(f"Arquivo não encontrado: {arquivo}")
+            continue
 
-# Carregando os dados
-base_dados = carregar_todos_os_dados()
+        try:
+            abas = pd.read_excel(arquivo, sheet_name=None, header=None)
+            abas_validas = {}
 
-# Cabeçalho do App
-st.markdown("""
-    <div class="welcome-box">
-        <h2>🏖️ Salinas Resorts - Sistema de Gestão de Cotas</h2>
-        <p style="margin:0; font-size: 1.1rem;">Painel Administrativo para consulta e baixa de cotas por período.</p>
+            for aba_nome, bruto in abas.items():
+                linha_cabecalho = None
+                palavras_chave = ("CHECK", "COTA", "UNIDADE", "DATA", "ENTRADA", "SAÍDA", "SAIDA")
+
+                for idx, row in bruto.iterrows():
+                    texto = " ".join(row.fillna("").astype(str).str.upper().tolist())
+                    if any(palavra in texto for palavra in palavras_chave):
+                        linha_cabecalho = idx
+                        break
+
+                if linha_cabecalho is None:
+                    linha_cabecalho = 2 if len(bruto) > 2 else 0
+
+                df = pd.read_excel(arquivo, sheet_name=aba_nome, header=linha_cabecalho)
+                df = df.dropna(how="all")
+                if df.empty:
+                    continue
+
+                df.columns = [
+                    str(c).strip() if not str(c).startswith("Unnamed:") else f"Coluna {i + 1}"
+                    for i, c in enumerate(df.columns)
+                ]
+                primeira_coluna = df.columns[0]
+                df[primeira_coluna] = df[primeira_coluna].ffill()
+                abas_validas[aba_nome] = df
+
+            dados_consolidados[nome_resort] = abas_validas
+        except Exception as exc:
+            dados_consolidados[nome_resort] = {}
+            avisos.append(f"Não foi possível ler {arquivo}: {exc}")
+
+    return dados_consolidados, avisos
+
+
+def localizar_colunas_data(df):
+    col_checkin, col_checkout = None, None
+
+    for coluna in df.columns:
+        nome = str(coluna).strip().upper()
+        if col_checkin is None and any(x in nome for x in ("CHECK-IN", "CHECKIN", "ENTRADA", "DATA INICIAL", "INÍCIO", "INICIO")):
+            col_checkin = coluna
+        if col_checkout is None and any(x in nome for x in ("CHECK-OUT", "CHECKOUT", "SAÍDA", "SAIDA", "TÉRMINO", "TERMINO", "DATA FINAL", "FINAL")):
+            col_checkout = coluna
+
+    # Fallback apenas quando os cabeçalhos não ajudam.
+    if col_checkin is None and len(df.columns) > 1:
+        col_checkin = df.columns[1]
+    if col_checkout is None and len(df.columns) > 2:
+        col_checkout = df.columns[2]
+
+    return col_checkin, col_checkout
+
+
+def data_segura(valor):
+    if pd.isna(valor):
+        return pd.NaT
+    try:
+        return pd.to_datetime(valor, errors="coerce", dayfirst=True)
+    except (ValueError, TypeError):
+        return pd.NaT
+
+
+base_dados, avisos_arquivos = carregar_todos_os_dados()
+total_abas = sum(len(abas) for abas in base_dados.values())
+total_resorts_com_dados = sum(bool(abas) for abas in base_dados.values())
+
+# ------------------------------------------------------------
+# MENU LATERAL
+# ------------------------------------------------------------
+with st.sidebar:
+    st.markdown("## 🏖️ SALINAS")
+    st.markdown("**GESTÃO DE COTAS**")
+    st.markdown("---")
+    menu = st.radio(
+        "MENU PRINCIPAL",
+        ["🔎 Consultar cotas", "📅 Cronogramas", "⚙️ Cadastros"],
+        label_visibility="visible",
+    )
+    st.markdown("---")
+    st.caption("Painel administrativo")
+    st.caption("Consulta de períodos e cotas")
+    if st.button("🔄 Atualizar planilhas", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+# ------------------------------------------------------------
+# CABECALHO
+# ------------------------------------------------------------
+st.markdown(
+    """
+    <div class="hero">
+        <div class="brand-eyebrow">Hospitalidade • Planejamento • Organização</div>
+        <div class="hero-tag">PAINEL ADMINISTRATIVO</div>
+        <h1>Salinas Resorts</h1>
+        <p>Gestão de cotas e consulta de períodos em um só lugar. Encontre as informações das planilhas com mais clareza e agilidade.</p>
     </div>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
-# Menu Lateral de Navegação
-menu = st.sidebar.radio("Navegação", ["🔍 Consultar & Alugar", "📅 Visualizar Cronogramas Brutos", "⚙️ Cadastros"])
+# Avisos dos arquivos, sem interromper a aplicação
+if avisos_arquivos:
+    with st.expander("Verificar arquivos Excel", expanded=False):
+        st.warning("Confira se os quatro arquivos estão na mesma pasta do aplicativo.")
+        for aviso in avisos_arquivos:
+            st.write(f"• {aviso}")
 
-if menu == "🔍 Consultar & Alugar":
-    st.subheader("🔍 Painel de Busca por Período e Resort")
-    
-    lista_resorts = ["🌍 Todos os Resorts"] + list(base_dados.keys())
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        resort_selecionado = st.selectbox("Selecione o Resort", lista_resorts)
-    with col2:
-        andar_pref = st.selectbox("Preferência de Andar", ["Qualquer", "Andar Alto", "Andar Médio", "Andar Baixo"])
-        
-    st.write("### 📅 Escolha o Período Desejado (Dia / Mês / Ano)")
-    col_d1, col_d2 = st.columns(2)
-    with col_d1:
-        data_entrada = st.date_input("Data de Entrada (Check-in)", value=datetime.today())
-    with col_d2:
-        data_saida = st.date_input("Data de Saída (Check-out)", value=datetime.today())
-        
-    st.write("---")
-    
-    if st.button("🔎 Buscar Cotas Disponíveis", type="primary", use_container_width=True):
-        
-        entrada_br = data_entrada.strftime('%d/%m/%Y')
-        saida_br = data_saida.strftime('%d/%m/%Y')
-        
-        resorts_alvo = list(base_dados.keys()) if resort_selecionado == "🌍 Todos os Resorts" else [resort_selecionado]
-        
-        st.success(f"Buscando em **{resort_selecionado}** para o período de **{entrada_br}** a **{saida_br}**:")
-        
-        total_encontrados = 0
-        
-        for r_nome in resorts_alvo:
-            abas_resort = base_dados.get(r_nome, {})
-            
-            for aba_nome, df in abas_resort.items():
-                # Identifica dinamicamente quais colunas são de Check-in e Check-out
-                col_checkin = None
-                col_checkout = None
-                
-                for col in df.columns:
-                    c_str = str(col).upper()
-                    if 'CHECK' in c_str or 'ENTRADA' in c_str or 'DATA INICIAL' in c_str:
-                        if not col_checkin:
-                            col_checkin = col
-                    elif 'OUT' in c_str or 'SAÍDA' in c_str or 'TERMINO' in c_str or 'FINAL' in c_str:
-                        if not col_checkout:
-                            col_checkout = col
-                
-                # Se não achou pelos títulos, tenta deduzir pelas colunas 1 e 2 (padrão comum)
-                if not col_checkin and len(df.columns) > 1:
-                    col_checkin = df.columns[1]
-                if not col_checkout and len(df.columns) > 2:
-                    col_checkout = df.columns[2]
-                
-                if col_checkin and col_checkout:
-                    # Converte as colunas para formato de data de forma segura
-                    df['Data_In'] = pd.to_datetime(df[col_checkin], errors='coerce', dayfirst=True).dt.date
-                    df['Data_Out'] = pd.to_datetime(df[col_checkout], errors='coerce', dayfirst=True).dt.date
-                    
-                    # Filtro flexível: Verifica se a data buscada coincide com o intervalo cadastrado
-                    resultados_filtrados = df[
-                        (df['Data_In'].notnull()) & 
-                        (df['Data_Out'].notnull()) &
-                        (df['Data_In'] <= data_saida) & 
-                        (df['Data_Out'] >= data_entrada)
-                    ]
-                    
-                    if not resultados_filtrados.empty:
-                        for _, row in resultados_filtrados.iterrows():
-                            total_encontrados += 1
-                            cota_id = row[df.columns[0]]
-                            
-                            d_in = row['Data_In'].strftime('%d/%m/%Y')
-                            d_out = row['Data_Out'].strftime('%d/%m/%Y')
-                            
-                            # Tenta capturar o nome do período/evento se houver coluna extra
-                            detalhe_extra = ""
-                            if len(df.columns) > 6:
-                                val_extra = row[df.columns[6]]
-                                if pd.notnull(val_extra) and str(val_extra) != 'nan':
-                                    detalhe_extra = f" | Evento: {val_extra}"
-                            
-                            st.markdown(f"""
-                                <div class="card">
-                                    <h4>🏨 Resort: {r_nome} | 🔑 Cota: {cota_id}</h4>
-                                    <p><b>Período na Planilha:</b> {d_in} até {d_out}{detalhe_extra}</p>
-                                    <p><b>Aba / Mês:</b> {aba_nome}</p>
+# ------------------------------------------------------------
+# CONSULTA
+# ------------------------------------------------------------
+if menu == "🔎 Consultar cotas":
+    st.markdown('<div class="section-heading">Encontre sua estadia</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-subtitle">Selecione o resort e informe as datas para consultar os períodos registrados nas planilhas.</div>',
+        unsafe_allow_html=True,
+    )
+
+    with st.container(border=True):
+        col_resort, col_andar = st.columns([1.4, 1])
+        with col_resort:
+            opcoes_resorts = ["Todos os resorts"] + list(ARQUIVOS_RESORTS.keys())
+            resort_selecionado = st.selectbox("Resort", opcoes_resorts)
+        with col_andar:
+            andar_pref = st.selectbox(
+                "Preferência de andar",
+                ["Qualquer andar", "Andar alto", "Andar médio", "Andar baixo"],
+            )
+            st.caption("A preferência de andar só será aplicada quando essa informação existir na planilha.")
+
+        col_in, col_out = st.columns(2)
+        with col_in:
+            data_entrada = st.date_input("Check-in", value=date.today(), format="DD/MM/YYYY")
+        with col_out:
+            data_saida = st.date_input("Check-out", value=date.today(), format="DD/MM/YYYY")
+
+        buscar = st.button("🔎  Buscar cotas no período", type="primary", use_container_width=True)
+
+    if buscar:
+        if data_saida <= data_entrada:
+            st.error("A data de check-out precisa ser posterior à data de check-in.")
+        else:
+            resorts_alvo = list(ARQUIVOS_RESORTS.keys()) if resort_selecionado == "Todos os resorts" else [resort_selecionado]
+            resultados = []
+
+            with st.spinner("Consultando as planilhas..."):
+                for nome_resort in resorts_alvo:
+                    for nome_aba, df_original in base_dados.get(nome_resort, {}).items():
+                        df = df_original.copy()
+                        col_in_excel, col_out_excel = localizar_colunas_data(df)
+
+                        if col_in_excel is None or col_out_excel is None:
+                            continue
+
+                        df["_data_in"] = df[col_in_excel].apply(data_segura)
+                        df["_data_out"] = df[col_out_excel].apply(data_segura)
+
+                        # Intervalo de hospedagem: check-out é exclusivo.
+                        # O período cadastrado deve cobrir toda a estadia solicitada.
+                        inicio = pd.Timestamp(data_entrada)
+                        fim = pd.Timestamp(data_saida)
+                        filtro = (
+                            df["_data_in"].notna()
+                            & df["_data_out"].notna()
+                            & (df["_data_in"] <= inicio)
+                            & (df["_data_out"] >= fim)
+                        )
+
+                        for _, linha in df.loc[filtro].iterrows():
+                            cota = linha.iloc[0]
+                            detalhes = []
+                            for coluna in df.columns:
+                                nome_coluna = str(coluna).lower()
+                                if coluna in ("_data_in", "_data_out", col_in_excel, col_out_excel):
+                                    continue
+                                if any(p in nome_coluna for p in ("andar", "torre", "bloco", "apartamento", "unidade", "observ")):
+                                    valor = linha[coluna]
+                                    if pd.notna(valor) and str(valor).strip().lower() != "nan":
+                                        detalhes.append(f"{coluna}: {valor}")
+
+                            resultados.append({
+                                "resort": nome_resort,
+                                "cota": str(cota),
+                                "aba": nome_aba,
+                                "entrada": linha["_data_in"].strftime("%d/%m/%Y"),
+                                "saida": linha["_data_out"].strftime("%d/%m/%Y"),
+                                "detalhes": " • ".join(detalhes) if detalhes else "Sem detalhes adicionais na planilha",
+                            })
+
+            st.markdown("---")
+            st.markdown('<div class="section-heading">Resultado da consulta</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="section-subtitle">Período solicitado: {data_entrada.strftime("%d/%m/%Y")} a {data_saida.strftime("%d/%m/%Y")}</div>',
+                unsafe_allow_html=True,
+            )
+
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown(f'<div class="metric-card"><div class="metric-label">Registros encontrados</div><div class="metric-value">{len(resultados)}</div></div>', unsafe_allow_html=True)
+            with c2:
+                st.markdown(f'<div class="metric-card"><div class="metric-label">Resorts consultados</div><div class="metric-value">{len(resorts_alvo)}</div></div>', unsafe_allow_html=True)
+            with c3:
+                st.markdown(f'<div class="metric-card"><div class="metric-label">Planilhas com dados</div><div class="metric-value">{total_resorts_com_dados}</div></div>', unsafe_allow_html=True)
+
+            if resultados:
+                st.caption("Importante: os resultados refletem os períodos encontrados nas planilhas. Esta consulta não confirma nem bloqueia uma reserva.")
+                for item in resultados:
+                    st.markdown(
+                        f"""
+                        <div class="result-card">
+                            <div class="result-top">
+                                <div>
+                                    <div class="result-title">🏨 {item['resort']}</div>
+                                    <p class="result-subtitle">Cota {item['cota']}</p>
                                 </div>
-                            """, unsafe_allow_html=True)
-                            
-        if total_encontrados == 0:
-            st.warning("⚠️ Nenhuma cota bateu exatamente com esse intervalo de datas na busca automática.")
-            st.info("💡 **Dica:** Vá até a aba lateral **'Visualizar Cronogramas Brutos'**, selecione o resort desejado e confira exatamente como as datas estão escritas na sua planilha para realizar a busca com precisão.")
+                                <span class="status-pill">Encontrado na planilha</span>
+                            </div>
+                            <div class="result-details">
+                                <div class="detail-box">
+                                    <div class="detail-label">CHECK-IN CADASTRADO</div>
+                                    <div class="detail-value">{item['entrada']}</div>
+                                </div>
+                                <div class="detail-box">
+                                    <div class="detail-label">CHECK-OUT CADASTRADO</div>
+                                    <div class="detail-value">{item['saida']}</div>
+                                </div>
+                                <div class="detail-box">
+                                    <div class="detail-label">ABA / PERÍODO</div>
+                                    <div class="detail-value">{item['aba']}</div>
+                                </div>
+                            </div>
+                            <p style="color:#667789;font-size:.84rem;margin:14px 0 0 0;">{item['detalhes']}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.markdown(
+                    """
+                    <div class="empty-state">
+                        <h3 style="color:#203b57;margin-top:0;">Nenhum período correspondente foi encontrado</h3>
+                        <p>Confira as datas, selecione outro resort ou verifique os cronogramas importados.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-elif menu == "📅 Visualizar Cronogramas Brutos":
-    st.subheader("📊 Inspeção Completa dos Arquivos Excel")
-    resort_escolhido_bruto = st.selectbox("Escolha o Resort para inspecionar", list(base_dados.keys()))
-    abas_brutas = base_dados.get(resort_escolhido_bruto, {})
-    
-    if abas_brutas:
-        aba_escolhida = st.selectbox("Selecione a Aba (Mês/Ano)", list(abas_brutas.keys()))
-        st.info(f"Exibindo os dados limpos do resort **{resort_escolhido_bruto}** na aba **{aba_escolhida}**:")
-        st.dataframe(abas_brutas[aba_escolhida], use_container_width=True)
+# ------------------------------------------------------------
+# CRONOGRAMAS
+# ------------------------------------------------------------
+elif menu == "📅 Cronogramas":
+    st.markdown('<div class="section-heading">Cronogramas dos resorts</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Consulte os dados importados dos arquivos Excel.</div>', unsafe_allow_html=True)
+
+    col_r, col_a = st.columns(2)
+    with col_r:
+        resort_bruto = st.selectbox("Selecione o resort", list(ARQUIVOS_RESORTS.keys()))
+    abas = base_dados.get(resort_bruto, {})
+    with col_a:
+        aba_bruta = st.selectbox("Selecione a aba / período", list(abas.keys()) if abas else ["Nenhuma aba encontrada"])
+
+    if abas and aba_bruta in abas:
+        df_exibir = abas[aba_bruta]
+        filtro_texto = st.text_input("Filtrar linhas", placeholder="Digite cota, unidade ou informação...")
+        if filtro_texto:
+            mascara = df_exibir.astype(str).apply(
+                lambda coluna: coluna.str.contains(filtro_texto, case=False, na=False, regex=False)
+            ).any(axis=1)
+            df_exibir = df_exibir[mascara]
+        st.caption(f"{len(df_exibir)} linha(s) exibida(s) • Aba: {aba_bruta}")
+        st.dataframe(df_exibir, use_container_width=True, hide_index=True)
+        st.download_button(
+            "⬇️ Baixar esta tabela em CSV",
+            data=df_exibir.to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"{resort_bruto}_{aba_bruta}.csv".replace("/", "-"),
+            mime="text/csv",
+        )
     else:
-        st.error("Nenhum dado encontrado para este resort.")
+        st.warning("Nenhum dado foi encontrado para este resort. Confira se o arquivo Excel está na pasta do aplicativo.")
 
+# ------------------------------------------------------------
+# CADASTROS
+# ------------------------------------------------------------
 elif menu == "⚙️ Cadastros":
-    st.subheader("⚙️ Configurações e Cadastros de Cotistas")
-    st.text_input("Nome do Cotista", "Ex: Elias / Carol / Carlos")
-    st.text_input("Número da Cota", "Ex: Cota 01")
-    st.button("Salvar Cadastro")
+    st.markdown('<div class="section-heading">Cadastro de cotistas</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-subtitle">Área preparada para organizar os dados de contato dos cotistas.</div>',
+        unsafe_allow_html=True,
+    )
+    st.info("Nesta versão, os cadastros ainda não são gravados permanentemente. Para evitar perda de informações, o formulário abaixo é apenas demonstrativo até definirmos onde os dados serão armazenados.")
+
+    with st.container(border=True):
+        with st.form("form_cotista"):
+            nome_cotista = st.text_input("Nome do cotista")
+            numero_cota = st.text_input("Número da cota")
+            telefone = st.text_input("Telefone / WhatsApp")
+            resort_cadastro = st.selectbox("Resort relacionado", list(ARQUIVOS_RESORTS.keys()))
+            observacoes = st.text_area("Observações", placeholder="Informações adicionais (opcional)")
+            enviado = st.form_submit_button("Validar cadastro", type="primary", use_container_width=True)
+
+        if enviado:
+            if not nome_cotista.strip() or not numero_cota.strip():
+                st.error("Preencha pelo menos o nome do cotista e o número da cota.")
+            else:
+                st.success("Dados validados nesta sessão. Eles ainda não foram salvos em um banco de dados.")
+
+# ------------------------------------------------------------
+# RODAPE
+# ------------------------------------------------------------
+st.markdown("---")
+st.markdown(
+    '<p style="text-align:center;color:#8190a0;font-size:.78rem;">Salinas Resorts • Painel administrativo de consulta de cotas</p>',
+    unsafe_allow_html=True,
+)
