@@ -561,7 +561,7 @@ if menu == "🔎 Consultar cotas":
 # ------------------------------------------------------------
 elif menu == "📋 Gerenciar Reservas":
     st.markdown('<div class="section-heading">Gerenciar Reservas</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtitle">Consulte os links e reservas, cancele registros e libere cotas. O histórico permanece salvo.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Consulte links e reservas, cancele registros ou exclua definitivamente reservas já canceladas.</div>', unsafe_allow_html=True)
 
     if st.button("🔄 Atualizar lista de reservas", use_container_width=False):
         st.rerun()
@@ -625,6 +625,29 @@ elif menu == "📋 Gerenciar Reservas":
                             st.error("O Supabase não confirmou o cancelamento. Confira a situação da reserva.")
                     except RuntimeError as erro:
                         st.error(f"Não foi possível cancelar: {erro}")
+            elif r.get("status") == "cancelado":
+                with st.expander("🗑️ Excluir definitivamente esta reserva"):
+                    st.warning("Esta ação é irreversível. A reserva, o pré-check-in e os dados dos acompanhantes serão apagados do banco de dados. Não afeta registros da GAV.")
+                    texto_confirmacao = st.text_input(
+                        "Para confirmar, digite EXCLUIR",
+                        key=f"texto_exclusao_{id_reserva}",
+                        placeholder="EXCLUIR",
+                    )
+                    if st.button(
+                        "Excluir definitivamente",
+                        key=f"excluir_{id_reserva}",
+                        type="primary",
+                        disabled=texto_confirmacao.strip() != "EXCLUIR",
+                    ):
+                        try:
+                            resposta = chamar_supabase("excluir_reserva_cancelada_admin", {"p_reserva_id": id_reserva})
+                            if isinstance(resposta, dict) and resposta.get("excluida") is True:
+                                st.success("Reserva excluída definitivamente do sistema.")
+                                st.rerun()
+                            else:
+                                st.error("O Supabase não confirmou a exclusão.")
+                        except RuntimeError as erro:
+                            st.error(f"Não foi possível excluir: {erro}")
 
 # ------------------------------------------------------------
 # CRONOGRAMAS
