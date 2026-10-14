@@ -347,7 +347,7 @@ with st.sidebar:
     st.markdown("---")
     menu = st.radio(
         "MENU PRINCIPAL",
-        ["🔎 Consultar cotas", "📅 Cronogramas", "⚙️ Cadastros"],
+        ["🔎 Consultar cotas", "📋 Gerenciar Reservas", "📅 Cronogramas", "⚙️ Cadastros"],
         label_visibility="visible",
     )
     st.markdown("---")
@@ -555,6 +555,76 @@ if menu == "🔎 Consultar cotas":
                     """,
                     unsafe_allow_html=True,
                 )
+
+# ------------------------------------------------------------
+# GERENCIAR RESERVAS (acesso somente ao administrador autenticado)
+# ------------------------------------------------------------
+elif menu == "📋 Gerenciar Reservas":
+    st.markdown('<div class="section-heading">Gerenciar Reservas</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Consulte os links e reservas, cancele registros e libere cotas. O histórico permanece salvo.</div>', unsafe_allow_html=True)
+
+    if st.button("🔄 Atualizar lista de reservas", use_container_width=False):
+        st.rerun()
+
+    try:
+        registros = chamar_supabase("listar_reservas_admin", {})
+        if isinstance(registros, str):
+            registros = json.loads(registros)
+        if not isinstance(registros, list):
+            raise RuntimeError("O Supabase não retornou uma lista de reservas.")
+    except (RuntimeError, ValueError, TypeError) as erro:
+        st.error(f"Não foi possível carregar as reservas: {erro}")
+        st.info("Verifique se o arquivo SQL de gerenciamento foi executado no Supabase.")
+        st.stop()
+
+    total_confirmadas = sum(r.get("status") == "confirmado" for r in registros)
+    total_pendentes = sum(r.get("status") == "pendente" and not r.get("expirado") for r in registros)
+    total_canceladas = sum(r.get("status") == "cancelado" for r in registros)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Confirmadas", total_confirmadas)
+    col2.metric("Links pendentes", total_pendentes)
+    col3.metric("Canceladas", total_canceladas)
+
+    filtro_status = st.selectbox("Filtrar por situação", ["Todas", "Pendentes", "Confirmadas", "Canceladas", "Expiradas"])
+    pesquisa = st.text_input("Pesquisar", placeholder="Nome do hóspede, resort ou cota")
+    texto_busca = pesquisa.strip().casefold()
+
+    def status_exibicao(r):
+        if r.get("status") == "pendente" and r.get("expirado"):
+            return "Expiradas"
+        return {"pendente": "Pendentes", "confirmado": "Confirmadas", "cancelado": "Canceladas"}.get(r.get("status"), "Outras")
+
+    filtradas = [r for r in registros if
+                 (filtro_status == "Todas" or status_exibicao(r) == filtro_status)
+                 and (not texto_busca or any(texto_busca in str(r.get(k) or "").casefold()
+                                              for k in ("nome", "resort", "cota", "id")))]
+    st.caption(f"{len(filtradas)} registro(s) encontrado(s)")
+    if not filtradas:
+        st.info("Nenhuma reserva corresponde aos filtros.")
+
+    for r in filtradas:
+        id_reserva = str(r.get("id", ""))
+        situacao = status_exibicao(r)
+        with st.container(border=True):
+            st.markdown(f"**{r.get('resort') or 'Resort não informado'} — Cota {r.get('cota') or '-'}**")
+            st.write(f"**Período:** {r.get('checkin') or '-'} a {r.get('checkout') or '-'}")
+            st.write(f"**Hóspede:** {r.get('nome') or 'Ainda não informado'}")
+            st.write(f"**Situação:** {situacao[:-1] if situacao.endswith('s') else situacao}")
+            st.caption(f"Identificador: {id_reserva}")
+            if r.get("status") in ("pendente", "confirmado"):
+                if r.get("status") == "confirmado":
+                    st.warning("Atenção: cancelar aqui não cancela a hospedagem diretamente com o resort. Verifique o procedimento com a GAV.")
+                confirmar = st.checkbox("Estou ciente e desejo cancelar este registro e liberar a cota.", key=f"confirmar_cancelamento_{id_reserva}")
+                if st.button("Cancelar reserva / link", key=f"cancelar_{id_reserva}", disabled=not confirmar):
+                    try:
+                        resposta = chamar_supabase("cancelar_reserva_admin", {"p_reserva_id": id_reserva})
+                        if isinstance(resposta, dict) and resposta.get("cancelada") is True:
+                            st.success("Registro cancelado. A cota foi liberada no sistema, caso não exista outro bloqueio.")
+                            st.rerun()
+                        else:
+                            st.error("O Supabase não confirmou o cancelamento. Confira a situação da reserva.")
+                    except RuntimeError as erro:
+                        st.error(f"Não foi possível cancelar: {erro}")
 
 # ------------------------------------------------------------
 # CRONOGRAMAS
