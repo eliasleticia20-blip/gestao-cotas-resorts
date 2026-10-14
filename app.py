@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from datetime import date, datetime
+import calendar
 
 import pandas as pd
 import streamlit as st
@@ -320,6 +321,52 @@ st.markdown(
         .status-pill { margin-top: 10px; }
         .panel { padding: 17px; }
     }
+    /* Painel premium, responsivo e integrado aos controles Streamlit */
+    .stApp { background: #f1f5fb !important; }
+    [data-testid="stSidebar"] { background: linear-gradient(180deg,#071d3d,#0b2b54 65%,#071a36) !important; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label { font-weight: 600; }
+    [data-testid="stSidebar"] [role="radiogroup"] { gap: 5px; }
+    [data-testid="stSidebar"] [role="radiogroup"] label {
+        padding: 11px 13px; border-radius: 11px; transition: background .15s;
+    }
+    [data-testid="stSidebar"] [role="radiogroup"] label:hover { background: rgba(255,255,255,.10); }
+    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
+        background: #1766b5; box-shadow: 0 5px 18px rgba(0,0,0,.16);
+    }
+    .side-brand { text-align:center; padding: 26px 4px 20px; }
+    .side-symbol { font-size: 2.4rem; line-height: 1.2; }
+    .side-name { font-size: 1.8rem; letter-spacing: .11em; font-weight: 800; color: #fff; }
+    .side-small { font-size: .73rem; letter-spacing: .38em; color:#e9c99c; }
+    .side-caption { font-size: .67rem; letter-spacing: .21em; color: #b4cbe5; margin-top: 12px; }
+    .hero { min-height: 270px; padding: 38px 40px; border-radius: 19px;
+        background-image: linear-gradient(90deg,rgba(5,26,52,.94),rgba(5,26,52,.65) 48%,rgba(5,26,52,.08)),
+        url('https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1800&q=85'); }
+    .hero h1 { font-size: clamp(2.3rem,4.2vw,4rem); }
+    .home-eyebrow { color:#e5bf83; font-weight:700; font-size:.78rem; letter-spacing:.16em; margin-bottom:10px; }
+    .dashboard-title { color:#112b4e; font-size:1.16rem; font-weight:800; margin: 10px 0 12px; }
+    .dashboard-sub { color:#6a7d93; font-size:.88rem; }
+    .dash-card { background:#fff; border:1px solid #e1e9f3; border-radius:16px;
+        padding:18px 19px; box-shadow:0 6px 24px rgba(18,44,80,.045); min-height:108px; }
+    .dash-card .label { color:#71829b; font-size:.81rem; margin-bottom:7px; }
+    .dash-card .value { font-size:1.9rem; color:#102d52; font-weight:800; line-height:1.1; }
+    .dash-card .glyph { float:right; font-size:1.6rem; opacity:.8; }
+    .home-panel { background:white; border:1px solid #e1e9f3; border-radius:16px;
+        padding:19px; margin: 5px 0 15px; box-shadow:0 6px 22px rgba(18,44,80,.04); }
+    .calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:5px; }
+    .calendar-day { min-height:33px; display:flex; align-items:center; justify-content:center;
+        border-radius:8px; color:#24405d; font-size:.83rem; }
+    .calendar-day.head { font-weight:700; color:#77879c; background:#f2f6fa; }
+    .calendar-day.booked { background:#ffe3e3; color:#a93240; font-weight:800; }
+    .calendar-day.pending { background:#fff0d6; color:#946012; font-weight:800; }
+    .calendar-day.today { outline:2px solid #2276cc; outline-offset:-2px; }
+    .booking-row { padding:11px 0; border-bottom:1px solid #eef2f6; font-size:.86rem; color:#213954; }
+    .booking-row:last-child { border-bottom:0; }
+    .booking-status { font-size:.73rem; font-weight:700; color:#147b58; }
+    .resort-row { padding:11px 0; border-bottom:1px solid #eef2f6; font-size:.87rem; }
+    .resort-row:last-child { border-bottom:0; }
+    .resort-name { font-weight:700; color:#17395c; }
+    .resort-meta { color:#78889a; font-size:.77rem; }
+    @media(max-width:700px){ .hero {padding:34px 22px;min-height:260px;} .home-panel {padding:14px;} }
     </style>
     """,
     unsafe_allow_html=True,
@@ -413,13 +460,13 @@ total_resorts_com_dados = sum(bool(abas) for abas in base_dados.values())
 # MENU LATERAL
 # ------------------------------------------------------------
 with st.sidebar:
-    st.markdown("## 🏖️ SALINAS")
-    st.markdown("**GESTÃO DE COTAS**")
+    st.markdown('<div class="side-brand"><div class="side-symbol">🌴</div><div class="side-name">SALINAS</div><div class="side-small">R E S O R T S</div><div class="side-caption">GESTÃO DE COTAS</div></div>', unsafe_allow_html=True)
     st.markdown("---")
     menu = st.radio(
         "MENU PRINCIPAL",
-        ["🔎 Consultar cotas", "📋 Gerenciar Reservas", "📅 Cronogramas", "⚙️ Cadastros"],
+        ["🏠 Início", "🔎 Consultar cotas", "📋 Gerenciar Reservas", "📅 Cronogramas", "⚙️ Cadastros"],
         label_visibility="visible",
+        key="menu_principal",
     )
     st.markdown("---")
     st.caption("Painel administrativo")
@@ -428,20 +475,6 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-# ------------------------------------------------------------
-# CABECALHO
-# ------------------------------------------------------------
-st.markdown(
-    """
-    <div class="hero">
-        <div class="brand-eyebrow">Sua próxima experiência começa aqui</div>
-        <div class="hero-tag">GESTÃO DE COTAS E ESTADIAS</div>
-        <h1>Salinas Resorts</h1>
-        <p>O seu refúgio no litoral paraense. Explore os períodos cadastrados e organize cada estadia com conforto e praticidade.</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
 
 # Avisos dos arquivos, sem interromper a aplicação
 if avisos_arquivos:
@@ -487,9 +520,105 @@ def situacao_cota(item, registros):
 
 
 # ------------------------------------------------------------
+# PAINEL INICIAL - dados reais das planilhas e do Supabase
+# ------------------------------------------------------------
+if menu == "🏠 Início":
+    st.markdown("""
+    <div class="hero">
+      <div class="home-eyebrow">GESTÃO DE COTAS E ESTADIAS</div>
+      <h1>Salinas Resorts</h1>
+      <p>Organize suas cotas, acompanhe reservas e proporcione experiências inesquecíveis.</p>
+    </div>""", unsafe_allow_html=True)
+
+    registros_inicio = []
+    erro_inicio = None
+    try:
+        registros_inicio = chamar_supabase("listar_reservas_admin", {})
+        if isinstance(registros_inicio, str):
+            registros_inicio = json.loads(registros_inicio)
+        if not isinstance(registros_inicio, list):
+            raise RuntimeError("Resposta inesperada do banco de dados.")
+    except (RuntimeError, ValueError, TypeError) as exc:
+        erro_inicio = str(exc)
+        st.warning("Não foi possível consultar as reservas agora. Os indicadores de reservas estão indisponíveis.")
+
+    total_periodos = sum(len(df) for abas in base_dados.values() for df in abas.values())
+    confirmadas = sum(r.get("status") == "confirmado" for r in registros_inicio)
+    pendentes = sum(r.get("status") == "pendente" and not r.get("expirado") for r in registros_inicio)
+    canceladas = sum(r.get("status") == "cancelado" for r in registros_inicio)
+    metricas = [
+        ("Períodos nas planilhas", str(total_periodos), "📅"),
+        ("Reservas confirmadas", str(confirmadas) if not erro_inicio else "—", "✅"),
+        ("Links pendentes", str(pendentes) if not erro_inicio else "—", "🔗"),
+        ("Resorts com dados", str(total_resorts_com_dados), "🏨"),
+    ]
+    for col, (rotulo, valor, simbolo) in zip(st.columns(4), metricas):
+        with col:
+            st.markdown(f'<div class="dash-card"><span class="glyph">{simbolo}</span><div class="label">{rotulo}</div><div class="value">{valor}</div></div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="dashboard-title">Planeje sua próxima estadia</div><div class="dashboard-sub">Acesse a consulta para encontrar períodos e gerar links de reserva.</div>', unsafe_allow_html=True)
+    def abrir_consulta():
+        st.session_state["menu_principal"] = "🔎 Consultar cotas"
+    st.button("🔎 Consultar períodos disponíveis", type="primary", use_container_width=True, on_click=abrir_consulta)
+
+    painel_cal, painel_res, painel_hot = st.columns([1.12, 1, 1])
+    with painel_cal:
+        st.markdown('<div class="dashboard-title">📅 Calendário de reservas</div>', unsafe_allow_html=True)
+        hoje = date.today()
+        mes_inicio = date(hoje.year, hoje.month, 1)
+        mes_ref = st.date_input("Mês de referência", value=mes_inicio, format="DD/MM/YYYY", key="calendario_inicio")
+        ano, mes = mes_ref.year, mes_ref.month
+        nomes_meses = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        ocupados, aguardando = set(), set()
+        for reg in registros_inicio:
+            if reg.get("status") not in ("confirmado", "preenchido", "pendente") or reg.get("expirado"):
+                continue
+            inicio, fim = converter_data_reserva(reg.get("checkin")), converter_data_reserva(reg.get("checkout"))
+            if not inicio or not fim or fim <= inicio:
+                continue
+            for dia in range(1, calendar.monthrange(ano, mes)[1] + 1):
+                atual = date(ano, mes, dia)
+                if inicio <= atual < fim:
+                    (aguardando if reg.get("status") == "pendente" else ocupados).add(dia)
+        dias_html = ''.join(f'<div class="calendar-day head">{d}</div>' for d in ("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"))
+        for semana in calendar.monthcalendar(ano, mes):
+            for dia in semana:
+                if not dia:
+                    dias_html += '<div class="calendar-day"></div>'
+                else:
+                    classes = 'calendar-day' + (' booked' if dia in ocupados else ' pending' if dia in aguardando else '') + (' today' if (ano, mes, dia) == (hoje.year, hoje.month, hoje.day) else '')
+                    dias_html += f'<div class="{classes}">{dia}</div>'
+        st.markdown(f'<div class="home-panel"><strong>{nomes_meses[mes]} de {ano}</strong><div style="height:12px"></div><div class="calendar-grid">{dias_html}</div><div style="margin-top:14px;color:#708198;font-size:.75rem">🔴 Há reserva &nbsp; 🟠 Há link pendente &nbsp; 🔵 Hoje</div><div style="margin-top:6px;color:#8593a4;font-size:.72rem">Datas sem marcação não garantem disponibilidade; consulte cada cota.</div></div>', unsafe_allow_html=True)
+    with painel_res:
+        st.markdown('<div class="dashboard-title">🕒 Próximas reservas</div>', unsafe_allow_html=True)
+        proximas = []
+        for reg in registros_inicio:
+            entrada = converter_data_reserva(reg.get("checkin"))
+            if entrada and entrada >= date.today() and reg.get("status") in ("confirmado", "pendente", "preenchido") and not reg.get("expirado"):
+                proximas.append((entrada, reg))
+        proximas.sort(key=lambda x: x[0])
+        linhas = ''
+        for entrada, reg in proximas[:5]:
+            nome = html.escape(str(reg.get("nome") or "Hóspede ainda não informado"))
+            resort = html.escape(str(reg.get("resort") or "Resort"))
+            status = "Confirmada" if reg.get("status") == "confirmado" else "Pendente"
+            linhas += f'<div class="booking-row"><strong>{nome}</strong><div class="resort-meta">{entrada.strftime("%d/%m/%Y")} · {resort}</div><span class="booking-status">{status}</span></div>'
+        if not linhas:
+            linhas = '<div class="dashboard-sub">Nenhuma próxima reserva encontrada.</div>'
+        st.markdown(f'<div class="home-panel">{linhas}</div>', unsafe_allow_html=True)
+    with painel_hot:
+        st.markdown('<div class="dashboard-title">🏨 Resorts cadastrados</div>', unsafe_allow_html=True)
+        linhas = ''
+        for resort, abas in base_dados.items():
+            qtd = sum(len(df) for df in abas.values())
+            linhas += f'<div class="resort-row"><div class="resort-name">{html.escape(resort)}</div><div class="resort-meta">{qtd} registros nas planilhas</div></div>'
+        st.markdown(f'<div class="home-panel">{linhas}</div>', unsafe_allow_html=True)
+    st.caption(f"Reservas canceladas no histórico: {canceladas}" if not erro_inicio else "Histórico de reservas temporariamente indisponível.")
+
+# ------------------------------------------------------------
 # CONSULTA
 # ------------------------------------------------------------
-if menu == "🔎 Consultar cotas":
+elif menu == "🔎 Consultar cotas":
     st.markdown('<div class="section-heading">Planeje sua próxima estadia</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-subtitle">Escolha seu resort, selecione as datas e descubra os períodos cadastrados para sua viagem.</div>',
