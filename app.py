@@ -379,6 +379,42 @@ if avisos_arquivos:
         for aviso in avisos_arquivos:
             st.write(f"• {aviso}")
 
+# Verificacao de ocupacao com dados atuais do Supabase (sem cache).
+# A verificacao visual nao substitui a validacao atomica no RPC de criacao.
+def converter_data_reserva(valor):
+    if not valor:
+        return None
+    try:
+        return datetime.strptime(str(valor)[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        try:
+            return datetime.strptime(str(valor)[:10], "%d/%m/%Y").date()
+        except (ValueError, TypeError):
+            return None
+
+
+def situacao_cota(item, registros):
+    entrada = datetime.strptime(item["entrada"], "%d/%m/%Y").date()
+    saida = datetime.strptime(item["saida"], "%d/%m/%Y").date()
+    for registro in registros:
+        if (str(registro.get("resort") or "").strip().casefold() != str(item["resort"]).strip().casefold()
+                or str(registro.get("cota") or "").strip().casefold() != str(item["cota"]).strip().casefold()):
+            continue
+        inicio = converter_data_reserva(registro.get("checkin"))
+        fim = converter_data_reserva(registro.get("checkout"))
+        if not inicio or not fim:
+            # Registro sem datas confiaveis: nao presumir disponibilidade.
+            return "Indisponível (verificar cadastro)"
+        if entrada >= fim or saida <= inicio:
+            continue
+        status = str(registro.get("status") or "").strip().lower()
+        if status in ("confirmado", "preenchido"):
+            return "Reservada"
+        if status == "pendente" and not registro.get("expirado", False):
+            return "Aguardando confirmação"
+    return "Disponível"
+
+
 # ------------------------------------------------------------
 # CONSULTA
 # ------------------------------------------------------------
@@ -479,10 +515,25 @@ if menu == "🔎 Consultar cotas":
                 st.markdown(f'<div class="metric-card"><div class="metric-label">Planilhas com dados</div><div class="metric-value">{total_resorts_com_dados}</div></div>', unsafe_allow_html=True)
 
             if resultados:
-                st.caption("Importante: os resultados refletem os períodos encontrados nas planilhas. Esta consulta não confirma nem bloqueia uma reserva.")
+                st.caption("Os períodos vêm das planilhas; a ocupação é consultada no Supabase a cada atualização da página.")
+                try:
+                    reservas_atuais = chamar_supabase("listar_reservas_admin", {})
+                    if isinstance(reservas_atuais, str):
+                        reservas_atuais = json.loads(reservas_atuais)
+                    if not isinstance(reservas_atuais, list):
+                        raise RuntimeError("A consulta não retornou uma lista válida.")
+                    consulta_reservas_ok = True
+                except (RuntimeError, ValueError, TypeError) as erro:
+                    reservas_atuais = []
+                    consulta_reservas_ok = False
+                    st.error(f"Não foi possível verificar as reservas no Supabase: {erro}. Por segurança, novas reservas estão bloqueadas até a conexão voltar.")
+
                 for indice, item in enumerate(resultados):
-                    # Um unico container Streamlit envolve os dados e o botao.
-                    # Assim o botao nao fica solto abaixo do cartao.
+                    situacao = situacao_cota(item, reservas_atuais) if consulta_reservas_ok else "Verificação indisponível"
+                    disponivel = situacao == "Disponível"
+                    if not disponivel and st.session_state.get("cota_selecionada") == item:
+                        st.session_state.pop("cota_selecionada", None)
+                        st.session_state.pop("link_gerado", None)
                     with st.container(border=True):
                         topo_nome, topo_status, topo_botao = st.columns(
                             [3, 1.7, 2.2], vertical_alignment="center"
@@ -494,15 +545,18 @@ if menu == "🔎 Consultar cotas":
                                 unsafe_allow_html=True,
                             )
                         with topo_status:
-                            st.markdown(
-                                '<span class="status-pill">Encontrado na planilha</span>',
-                                unsafe_allow_html=True,
-                            )
+                            if disponivel:
+                                st.success("🟢 Disponível")
+                            elif situacao == "Reservada":
+                                st.error("🔒 Reservada")
+                            else:
+                                st.warning(f"🔒 {situacao}")
                         with topo_botao:
                             if st.button(
-                                "📅 Reservar para cliente",
+                                "📅 Reservar para cliente" if disponivel else "🔒 Indisponível para reserva",
                                 key=f"reservar_{indice}_{item['resort']}_{item['cota']}_{item['entrada']}_{item['saida']}",
                                 use_container_width=True,
+                                disabled=not disponivel,
                             ):
                                 st.session_state["cota_selecionada"] = item
                                 st.session_state.pop("link_gerado", None)
@@ -534,6 +588,13 @@ if menu == "🔎 Consultar cotas":
                             st.caption("Crie um link exclusivo para o cliente. O link expira em 48 horas.")
                             if st.button("Gerar link de reserva", key=f"link_{indice}", type="primary"):
                                 try:
+                                    reservas_revalidadas = chamar_supabase("listar_reservas_admin", {})
+                                    if isinstance(reservas_revalidadas, str):
+                                        reservas_revalidadas = json.loads(reservas_revalidadas)
+                                    if not isinstance(reservas_revalidadas, list):
+                                        raise RuntimeError("Não foi possível validar a disponibilidade.")
+                                    if situacao_cota(item, reservas_revalidadas) != "Disponível":
+                                        raise RuntimeError("Esta cota já possui uma reserva ou link ativo. Atualize a consulta.")
                                     token = chamar_supabase("criar_link_reserva", {
                                         "p_resort": item["resort"], "p_cota": item["cota"],
                                         "p_checkin": datetime.strptime(item["entrada"], "%d/%m/%Y").date().isoformat(),
