@@ -123,6 +123,77 @@ if not senha_admin:
     st.error("Configure ADMIN_PASSWORD nos Secrets antes de disponibilizar o painel administrativo.")
     st.stop()
 if not st.session_state.get("admin_autenticado", False):
+    # Aparência exclusiva da tela de login; não altera o painel ou o formulário do hóspede.
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap');
+    .stApp {
+        background:
+          linear-gradient(180deg, rgba(22,18,41,.27) 0%, rgba(40,24,47,.10) 36%, rgba(5,29,45,.48) 100%),
+          url('https://images.unsplash.com/photo-1514282401047-d79a71a590e8?auto=format&fit=crop&w=1800&q=85') center center / cover no-repeat fixed !important;
+        min-height: 100vh;
+    }
+    [data-testid="stHeader"] { background: transparent !important; }
+    [data-testid="stToolbar"] { background: transparent !important; }
+    [data-testid="stDecoration"] { display: none; }
+    .block-container {
+        max-width: 740px !important;
+        padding: clamp(100px, 21vh, 240px) 24px 100px !important;
+    }
+    h1 {
+        font-family: 'Playfair Display', Georgia, serif !important;
+        font-weight: 600 !important;
+        font-size: clamp(2.7rem, 8vw, 5rem) !important;
+        line-height: 1.13 !important;
+        letter-spacing: -.035em !important;
+        color: #fff7ed !important;
+        text-shadow: 0 3px 20px rgba(0,0,0,.48);
+        margin-bottom: 1.6rem !important;
+    }
+    [data-testid="stForm"] {
+        background: rgba(22, 29, 43, .49) !important;
+        border: 1px solid rgba(255,255,255,.35) !important;
+        border-radius: 22px !important;
+        padding: clamp(20px, 4vw, 32px) !important;
+        box-shadow: 0 22px 70px rgba(0,0,0,.24) !important;
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+    }
+    [data-testid="stForm"] label, [data-testid="stForm"] p {
+        color: #fffaf2 !important;
+        font-family: 'DM Sans', sans-serif !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stForm"] [data-baseweb="input"] > div {
+        background: rgba(255,255,255,.92) !important;
+        border: 1px solid rgba(255,255,255,.65) !important;
+        border-radius: 12px !important;
+        min-height: 54px;
+    }
+    [data-testid="stForm"] input { color: #1b3341 !important; }
+    [data-testid="stFormSubmitButton"] button {
+        width: 100% !important;
+        background: #087d8c !important;
+        color: #fff !important;
+        border: 1px solid rgba(255,255,255,.15) !important;
+        border-radius: 12px !important;
+        min-height: 54px !important;
+        font-family: 'DM Sans', sans-serif !important;
+        font-size: 1.08rem !important;
+        font-weight: 700 !important;
+        box-shadow: 0 8px 24px rgba(0,0,0,.22);
+    }
+    [data-testid="stFormSubmitButton"] button:hover {
+        background: #096977 !important;
+        color: #fff !important;
+    }
+    @media (max-width: 650px) {
+        .block-container { padding: 19vh 22px 80px !important; }
+        [data-testid="stForm"] { border-radius: 18px !important; }
+        .stApp { background-attachment: scroll !important; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
     st.title("Acesso administrativo")
     with st.form("login_admin"):
         senha_digitada = st.text_input("Senha de administrador", type="password")
