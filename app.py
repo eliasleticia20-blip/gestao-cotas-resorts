@@ -1,4 +1,5 @@
 import os
+import html
 from datetime import date, datetime
 
 import pandas as pd
@@ -367,48 +368,60 @@ if menu == "🔎 Consultar cotas":
             if resultados:
                 st.caption("Importante: os resultados refletem os períodos encontrados nas planilhas. Esta consulta não confirma nem bloqueia uma reserva.")
                 for indice, item in enumerate(resultados):
-                    st.markdown(
-                        f"""
-                        <div class="result-card">
-                            <div class="result-top">
-                                <div>
-                                    <div class="result-title">🏨 {item['resort']}</div>
-                                    <p class="result-subtitle">Cota {item['cota']}</p>
-                                </div>
-                                <span class="status-pill">Encontrado na planilha</span>
-                            </div>
+                    # Um unico container Streamlit envolve os dados e o botao.
+                    # Assim o botao nao fica solto abaixo do cartao.
+                    with st.container(border=True):
+                        topo_nome, topo_status, topo_botao = st.columns(
+                            [3, 1.7, 2.2], vertical_alignment="center"
+                        )
+                        with topo_nome:
+                            st.markdown(
+                                f"<div class='result-title'>🏨 {html.escape(str(item['resort']))}</div>"
+                                f"<p class='result-subtitle'>Cota {html.escape(str(item['cota']))}</p>",
+                                unsafe_allow_html=True,
+                            )
+                        with topo_status:
+                            st.markdown(
+                                '<span class="status-pill">Encontrado na planilha</span>',
+                                unsafe_allow_html=True,
+                            )
+                        with topo_botao:
+                            if st.button(
+                                "📅 Reservar para cliente",
+                                key=f"reservar_{indice}_{item['resort']}_{item['cota']}_{item['entrada']}_{item['saida']}",
+                                use_container_width=True,
+                            ):
+                                st.session_state["cota_selecionada"] = item
+
+                        st.markdown(
+                            f"""
                             <div class="result-details">
                                 <div class="detail-box">
                                     <div class="detail-label">CHECK-IN CADASTRADO</div>
-                                    <div class="detail-value">{item['entrada']}</div>
+                                    <div class="detail-value">{html.escape(str(item['entrada']))}</div>
                                 </div>
                                 <div class="detail-box">
                                     <div class="detail-label">CHECK-OUT CADASTRADO</div>
-                                    <div class="detail-value">{item['saida']}</div>
+                                    <div class="detail-value">{html.escape(str(item['saida']))}</div>
                                 </div>
                                 <div class="detail-box">
                                     <div class="detail-label">ABA / PERÍODO</div>
-                                    <div class="detail-value">{item['aba']}</div>
+                                    <div class="detail-value">{html.escape(str(item['aba']))}</div>
                                 </div>
                             </div>
-                            <p style="color:#667789;font-size:.84rem;margin:14px 0 0 0;">{item['detalhes']}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                    if st.button(
-                        "📅 Reservar para cliente",
-                        key=f"reservar_{indice}_{item['resort']}_{item['cota']}_{item['entrada']}_{item['saida']}",
-                        use_container_width=True,
-                    ):
-                        st.session_state["cota_selecionada"] = item
-
-                    if st.session_state.get("cota_selecionada") == item:
-                        st.info(
-                            "Cota selecionada para pré-reserva. O botão já está funcionando. "
-                            "Na próxima etapa vamos gerar um link individual e conectar o formulário seguro do cliente. "
-                            "Nenhuma reserva foi registrada ainda."
+                            <p style="color:#667789;font-size:.84rem;margin:14px 0 0 0;">
+                                {html.escape(str(item['detalhes']))}
+                            </p>
+                            """,
+                            unsafe_allow_html=True,
                         )
+
+                        if st.session_state.get("cota_selecionada") == item:
+                            st.info(
+                                "Cota selecionada para pré-reserva. O botão já está funcionando. "
+                                "Na próxima etapa vamos gerar um link individual e conectar o formulário seguro do cliente. "
+                                "Nenhuma reserva foi registrada ainda."
+                            )
             else:
                 st.markdown(
                     """
