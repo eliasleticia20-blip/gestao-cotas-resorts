@@ -1,5 +1,12 @@
 import os
 import html
+import json
+import hmac
+import re
+import uuid
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from datetime import date, datetime
 
 import pandas as pd
@@ -21,6 +28,112 @@ ARQUIVOS_RESORTS = {
     "Park Resort": "Salinas Park Resort.xlsx",
     "Premium Resort": "Salinas Premium Resort.xlsx",
 }
+
+# A chave secreta fica exclusivamente no servidor Streamlit.
+def config_segura(nome):
+    return st.secrets.get(nome, os.getenv(nome, ""))
+
+
+def chamar_supabase(funcao, dados):
+    url = config_segura("SUPABASE_URL").rstrip("/")
+    chave = config_segura("SUPABASE_KEY")
+    if not url or not chave or "COLE_AQUI" in chave:
+        raise RuntimeError("Configure SUPABASE_URL e SUPABASE_KEY nos Secrets do Streamlit.")
+    req = Request(
+        f"{url}/rest/v1/rpc/{funcao}",
+        data=json.dumps(dados).encode("utf-8"),
+        headers={"apikey": chave, "Authorization": f"Bearer {chave}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=20) as resposta:
+            return json.loads(resposta.read().decode("utf-8"))
+    except HTTPError as erro:
+        try:
+            detalhe = json.loads(erro.read().decode("utf-8")).get("message", "Erro no banco de dados")
+        except Exception:
+            detalhe = "Erro no banco de dados"
+        raise RuntimeError(detalhe) from erro
+    except URLError as erro:
+        raise RuntimeError("Não foi possível conectar ao Supabase.") from erro
+
+
+def validar_cpf(cpf):
+    digitos = re.sub(r"\D", "", cpf)
+    if len(digitos) != 11 or len(set(digitos)) == 1:
+        return False
+    for tamanho in (9, 10):
+        resto = (sum(int(digitos[i]) * (tamanho + 1 - i) for i in range(tamanho)) * 10) % 11
+        if (0 if resto == 10 else resto) != int(digitos[tamanho]):
+            return False
+    return True
+
+
+def tela_cliente(token):
+    st.title("Confirmação de reserva | Salinas Resorts")
+    try:
+        reserva = chamar_supabase("consultar_link_reserva", {"p_token": str(uuid.UUID(token))})
+    except (ValueError, RuntimeError) as erro:
+        st.error(f"Não foi possível consultar o link: {erro}")
+        st.stop()
+    if not reserva.get("valido"):
+        st.warning("Este link é inválido, expirou ou já foi utilizado.")
+        st.stop()
+    st.info(f"{reserva['resort']} | Cota {reserva['cota']} | {reserva['checkin']} a {reserva['checkout']}")
+    st.caption("O envio confirma a reserva automaticamente, sujeito à disponibilidade no momento da confirmação.")
+    # Fora do formulario para que os campos sejam atualizados ao clicar em + ou -.
+    qtd = st.number_input("Quantidade de acompanhantes", min_value=0, max_value=7, value=0, step=1, key="qtd_acompanhantes")
+    with st.form("confirmacao_cliente"):
+        nome = st.text_input("Nome completo do hóspede principal")
+        cpf = st.text_input("CPF do hóspede principal")
+        whatsapp = st.text_input("WhatsApp com DDD")
+        email = st.text_input("E-mail")
+        acompanhantes = []
+        for i in range(int(qtd)):
+            st.markdown(f"**Acompanhante {i + 1}**")
+            acompanhantes.append({"nome": st.text_input("Nome completo", key=f"nome_ac_{i}"), "cpf": st.text_input("CPF (se possuir)", key=f"cpf_ac_{i}")})
+        st.markdown("**Termos da reserva (versão v1-2026-10)**")
+        st.write("Confira resort, cota, datas e dados antes de confirmar. A confirmação deste formulário registra a solicitação no sistema. Condições de pagamento, alteração e cancelamento devem constar do acordo fornecido pelo responsável pela reserva.")
+        aceite = st.checkbox("Li e aceito os termos apresentados e autorizo o tratamento dos dados informados para organizar a hospedagem.")
+        enviar = st.form_submit_button("Confirmar reserva", type="primary", use_container_width=True)
+    if enviar:
+        if not aceite:
+            st.error("É necessário aceitar os termos.")
+        elif not nome.strip() or not validar_cpf(cpf) or not re.fullmatch(r"\d{10,13}", re.sub(r"\D", "", whatsapp)) or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()):
+            st.error("Confira nome, CPF, WhatsApp e e-mail.")
+        elif any(not a["nome"].strip() or (a["cpf"].strip() and not validar_cpf(a["cpf"])) for a in acompanhantes):
+            st.error("Confira os dados dos acompanhantes.")
+        else:
+            try:
+                resposta = chamar_supabase("confirmar_reserva_cliente", {"p_token": token, "p_nome": nome, "p_cpf": re.sub(r"\D", "", cpf), "p_whatsapp": re.sub(r"\D", "", whatsapp), "p_email": email.strip(), "p_versao_termo": "v1-2026-10", "p_acompanhantes": acompanhantes})
+                st.success(f"Reserva confirmada! {resposta['resort']} — cota {resposta['cota']} — {resposta['checkin']} a {resposta['checkout']}.")
+                st.balloons()
+            except RuntimeError as erro:
+                st.error(f"Reserva não confirmada: {erro}")
+    st.stop()
+
+
+# O link do cliente não dá acesso ao painel administrativo.
+_token_cliente = st.query_params.get("reserva")
+if _token_cliente:
+    tela_cliente(_token_cliente)
+
+senha_admin = config_segura("ADMIN_PASSWORD")
+if not senha_admin:
+    st.error("Configure ADMIN_PASSWORD nos Secrets antes de disponibilizar o painel administrativo.")
+    st.stop()
+if not st.session_state.get("admin_autenticado", False):
+    st.title("Acesso administrativo")
+    with st.form("login_admin"):
+        senha_digitada = st.text_input("Senha de administrador", type="password")
+        entrar = st.form_submit_button("Entrar")
+    if entrar:
+        if hmac.compare_digest(senha_digitada, senha_admin):
+            st.session_state["admin_autenticado"] = True
+            st.rerun()
+        else:
+            st.error("Senha incorreta")
+    st.stop()
 
 # ------------------------------------------------------------
 # ESTILO VISUAL
@@ -234,7 +347,7 @@ with st.sidebar:
     st.markdown("---")
     menu = st.radio(
         "MENU PRINCIPAL",
-        ["🔎 Consultar cotas", "📅 Cronogramas", "⚙️ Cadastros"],
+        ["🔎 Consultar cotas", "📋 Gerenciar Reservas", "📅 Cronogramas", "⚙️ Cadastros"],
         label_visibility="visible",
     )
     st.markdown("---")
@@ -392,6 +505,7 @@ if menu == "🔎 Consultar cotas":
                                 use_container_width=True,
                             ):
                                 st.session_state["cota_selecionada"] = item
+                                st.session_state.pop("link_gerado", None)
 
                         st.markdown(
                             f"""
@@ -417,11 +531,20 @@ if menu == "🔎 Consultar cotas":
                         )
 
                         if st.session_state.get("cota_selecionada") == item:
-                            st.info(
-                                "Cota selecionada para pré-reserva. O botão já está funcionando. "
-                                "Na próxima etapa vamos gerar um link individual e conectar o formulário seguro do cliente. "
-                                "Nenhuma reserva foi registrada ainda."
-                            )
+                            st.caption("Crie um link exclusivo para o cliente. O link expira em 48 horas.")
+                            if st.button("Gerar link de reserva", key=f"link_{indice}", type="primary"):
+                                try:
+                                    token = chamar_supabase("criar_link_reserva", {
+                                        "p_resort": item["resort"], "p_cota": item["cota"],
+                                        "p_checkin": datetime.strptime(item["entrada"], "%d/%m/%Y").date().isoformat(),
+                                        "p_checkout": datetime.strptime(item["saida"], "%d/%m/%Y").date().isoformat(),
+                                    })
+                                    st.session_state["link_gerado"] = f"{config_segura('APP_URL').rstrip('/')}?{urlencode({'reserva': token})}"
+                                except RuntimeError as erro:
+                                    st.error(f"Não foi possível gerar o link: {erro}")
+                            if st.session_state.get("link_gerado"):
+                                st.code(st.session_state["link_gerado"], language=None)
+                                st.caption("Copie e envie ao cliente pelo WhatsApp.")
             else:
                 st.markdown(
                     """
@@ -432,6 +555,76 @@ if menu == "🔎 Consultar cotas":
                     """,
                     unsafe_allow_html=True,
                 )
+
+# ------------------------------------------------------------
+# GERENCIAR RESERVAS (acesso somente ao administrador autenticado)
+# ------------------------------------------------------------
+elif menu == "📋 Gerenciar Reservas":
+    st.markdown('<div class="section-heading">Gerenciar Reservas</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Consulte os links e reservas, cancele registros e libere cotas. O histórico permanece salvo.</div>', unsafe_allow_html=True)
+
+    if st.button("🔄 Atualizar lista de reservas", use_container_width=False):
+        st.rerun()
+
+    try:
+        registros = chamar_supabase("listar_reservas_admin", {})
+        if isinstance(registros, str):
+            registros = json.loads(registros)
+        if not isinstance(registros, list):
+            raise RuntimeError("O Supabase não retornou uma lista de reservas.")
+    except (RuntimeError, ValueError, TypeError) as erro:
+        st.error(f"Não foi possível carregar as reservas: {erro}")
+        st.info("Verifique se o arquivo SQL de gerenciamento foi executado no Supabase.")
+        st.stop()
+
+    total_confirmadas = sum(r.get("status") == "confirmado" for r in registros)
+    total_pendentes = sum(r.get("status") == "pendente" and not r.get("expirado") for r in registros)
+    total_canceladas = sum(r.get("status") == "cancelado" for r in registros)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Confirmadas", total_confirmadas)
+    col2.metric("Links pendentes", total_pendentes)
+    col3.metric("Canceladas", total_canceladas)
+
+    filtro_status = st.selectbox("Filtrar por situação", ["Todas", "Pendentes", "Confirmadas", "Canceladas", "Expiradas"])
+    pesquisa = st.text_input("Pesquisar", placeholder="Nome do hóspede, resort ou cota")
+    texto_busca = pesquisa.strip().casefold()
+
+    def status_exibicao(r):
+        if r.get("status") == "pendente" and r.get("expirado"):
+            return "Expiradas"
+        return {"pendente": "Pendentes", "confirmado": "Confirmadas", "cancelado": "Canceladas"}.get(r.get("status"), "Outras")
+
+    filtradas = [r for r in registros if
+                 (filtro_status == "Todas" or status_exibicao(r) == filtro_status)
+                 and (not texto_busca or any(texto_busca in str(r.get(k) or "").casefold()
+                                              for k in ("nome", "resort", "cota", "id")))]
+    st.caption(f"{len(filtradas)} registro(s) encontrado(s)")
+    if not filtradas:
+        st.info("Nenhuma reserva corresponde aos filtros.")
+
+    for r in filtradas:
+        id_reserva = str(r.get("id", ""))
+        situacao = status_exibicao(r)
+        with st.container(border=True):
+            st.markdown(f"**{r.get('resort') or 'Resort não informado'} — Cota {r.get('cota') or '-'}**")
+            st.write(f"**Período:** {r.get('checkin') or '-'} a {r.get('checkout') or '-'}")
+            st.write(f"**Hóspede:** {r.get('nome') or 'Ainda não informado'}")
+            st.write(f"**Situação:** {situacao[:-1] if situacao.endswith('s') else situacao}")
+            st.caption(f"Identificador: {id_reserva}")
+            if r.get("status") in ("pendente", "confirmado"):
+                if r.get("status") == "confirmado":
+                    st.warning("Atenção: cancelar aqui não cancela a hospedagem diretamente com o resort. Verifique o procedimento com a GAV.")
+                confirmar = st.checkbox("Estou ciente e desejo cancelar este registro e liberar a cota.", key=f"confirmar_cancelamento_{id_reserva}")
+                if st.button("Cancelar reserva / link", key=f"cancelar_{id_reserva}", disabled=not confirmar):
+                    try:
+                        resposta = chamar_supabase("cancelar_reserva_admin", {"p_reserva_id": id_reserva})
+                        if isinstance(resposta, dict) and resposta.get("cancelada") is True:
+                            st.success("Registro cancelado. A cota foi liberada no sistema, caso não exista outro bloqueio.")
+                            st.rerun()
+                        else:
+                            st.error("O Supabase não confirmou o cancelamento. Confira a situação da reserva.")
+                    except RuntimeError as erro:
+                        st.error(f"Não foi possível cancelar: {erro}")
 
 # ------------------------------------------------------------
 # CRONOGRAMAS
