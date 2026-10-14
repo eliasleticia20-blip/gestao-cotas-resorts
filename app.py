@@ -296,6 +296,9 @@ if menu == "🔎 Consultar cotas":
         buscar = st.button("🔎  Buscar cotas no período", type="primary", use_container_width=True)
 
     if buscar:
+        st.session_state["busca_ativa"] = True
+
+    if st.session_state.get("busca_ativa", False):
         if data_saida <= data_entrada:
             st.error("A data de check-out precisa ser posterior à data de check-in.")
         else:
@@ -363,7 +366,7 @@ if menu == "🔎 Consultar cotas":
 
             if resultados:
                 st.caption("Importante: os resultados refletem os períodos encontrados nas planilhas. Esta consulta não confirma nem bloqueia uma reserva.")
-                for item in resultados:
+                for indice, item in enumerate(resultados):
                     st.markdown(
                         f"""
                         <div class="result-card">
@@ -393,6 +396,19 @@ if menu == "🔎 Consultar cotas":
                         """,
                         unsafe_allow_html=True,
                     )
+                    if st.button(
+                        "📅 Reservar para cliente",
+                        key=f"reservar_{indice}_{item['resort']}_{item['cota']}_{item['entrada']}_{item['saida']}",
+                        use_container_width=True,
+                    ):
+                        st.session_state["cota_selecionada"] = item
+
+                    if st.session_state.get("cota_selecionada") == item:
+                        st.info(
+                            "Cota selecionada para pré-reserva. O botão já está funcionando. "
+                            "Na próxima etapa vamos gerar um link individual e conectar o formulário seguro do cliente. "
+                            "Nenhuma reserva foi registrada ainda."
+                        )
             else:
                 st.markdown(
                     """
