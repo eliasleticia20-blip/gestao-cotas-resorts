@@ -13,6 +13,77 @@ import calendar
 import pandas as pd
 import streamlit as st
 
+# Utilitários de exibição e exportação de fichas administrativas.
+def data_br(valor):
+    if not valor:
+        return "—"
+    try:
+        return datetime.strptime(str(valor)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+    except (ValueError, TypeError):
+        return str(valor)
+
+
+def gerar_pdf_reserva(ficha):
+    """Gera ficha administrativa em memória, sem gravar dados pessoais em disco."""
+    from io import BytesIO
+    from xml.sax.saxutils import escape
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    fonte = "Helvetica"
+    caminho_fonte = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    if os.path.isfile(caminho_fonte):
+        if "SalinasSans" not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont("SalinasSans", caminho_fonte))
+        fonte = "SalinasSans"
+    azul = colors.HexColor("#102D52")
+    dourado = colors.HexColor("#C5A26B")
+    cinza = colors.HexColor("#65758B")
+    fundo = colors.HexColor("#F3F7FB")
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="SalTitle", fontName=fonte, fontSize=18, leading=24, textColor=azul, alignment=TA_CENTER, spaceAfter=8))
+    styles.add(ParagraphStyle(name="SalSub", fontName=fonte, fontSize=9, leading=15, textColor=cinza, alignment=TA_CENTER, spaceAfter=14))
+    styles.add(ParagraphStyle(name="SalHead", fontName=fonte, fontSize=11, leading=16, textColor=azul, spaceBefore=13, spaceAfter=8))
+    styles.add(ParagraphStyle(name="SalBody", fontName=fonte, fontSize=9, leading=15, textColor=azul))
+    styles.add(ParagraphStyle(name="SalFoot", fontName=fonte, fontSize=8, leading=12, textColor=cinza))
+    def txt(v):
+        return escape(str(v) if v not in (None, "") else "—")
+    def linha(campo, valor):
+        return [Paragraph(f"<b>{txt(campo)}</b>", styles["SalBody"]), Paragraph(txt(valor), styles["SalBody"])]
+    def tabela(pares):
+        t = Table([linha(k, v) for k, v in pares], colWidths=[48*mm, 126*mm], hAlign="LEFT")
+        t.setStyle(TableStyle([("BACKGROUND", (0,0),(-1,-1),fundo), ("VALIGN",(0,0),(-1,-1),"TOP"), ("LEFTPADDING",(0,0),(-1,-1),10), ("RIGHTPADDING",(0,0),(-1,-1),10), ("TOPPADDING",(0,0),(-1,-1),7), ("BOTTOMPADDING",(0,0),(-1,-1),7), ("LINEBELOW",(0,0),(-1,-2),.4,colors.HexColor("#DCE5EF"))]))
+        return t
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=18*mm, rightMargin=18*mm, topMargin=20*mm, bottomMargin=18*mm, title="Ficha de reserva - Salinas Resorts")
+    itens = [Paragraph("SALINAS RESORTS", styles["SalTitle"]), Paragraph("FICHA ADMINISTRATIVA DE RESERVA", styles["SalSub"])]
+    faixa = Table([[""]], colWidths=[174*mm], rowHeights=[2*mm])
+    faixa.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),dourado)]))
+    itens += [faixa, Paragraph("Dados da hospedagem", styles["SalHead"]), tabela([("Resort", ficha.get("resort")), ("Cota", ficha.get("cota")), ("Check-in", data_br(ficha.get("checkin"))), ("Check-out", data_br(ficha.get("checkout"))), ("Situação", str(ficha.get("status") or "—").capitalize()), ("ID da reserva", ficha.get("id") or ficha.get("reserva_id"))])]
+    hospede = ficha.get("hospede")
+    if isinstance(hospede, dict):
+        itens += [Paragraph("Hóspede principal", styles["SalHead"]), tabela([("Nome", hospede.get("nome")), ("CPF", hospede.get("cpf")), ("WhatsApp", hospede.get("whatsapp")), ("E-mail", hospede.get("email"))])]
+        acompanhantes = ficha.get("acompanhantes") or []
+        itens.append(Paragraph("Acompanhantes", styles["SalHead"]))
+        if acompanhantes:
+            for i, a in enumerate(acompanhantes, 1):
+                itens.append(KeepTogether([tabela([("Acompanhante", str(i)), ("Nome", a.get("nome")), ("CPF", a.get("cpf"))]), Spacer(1, 3*mm)]))
+        else:
+            itens.append(Paragraph("Nenhum acompanhante cadastrado.", styles["SalBody"]))
+        itens += [Spacer(1, 5*mm), Paragraph("Versão dos termos aceitos: " + txt(hospede.get("versao_termo")), styles["SalFoot"])]
+    else:
+        itens += [Spacer(1, 6*mm), Paragraph("Pré-check-in ainda não concluído.", styles["SalBody"])]
+    itens += [Spacer(1, 12*mm), Paragraph("Documento gerado pelo sistema de gestão de cotas. Não substitui voucher, confirmação ou autorização oficial do resort.", styles["SalFoot"])]
+    doc.build(itens)
+    return buffer.getvalue()
+
+
 # Ícones vetoriais discretos para os componentes HTML do painel.
 _ICON_PATHS = {
     "calendar": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
@@ -975,7 +1046,7 @@ elif menu == "Gerenciar Reservas":
         situacao = status_exibicao(r)
         with st.container(border=True):
             st.markdown(f"**{r.get('resort') or 'Resort não informado'} — Cota {r.get('cota') or '-'}**")
-            st.write(f"**Período:** {r.get('checkin') or '-'} a {r.get('checkout') or '-'}")
+            st.write(f"**Período:** {data_br(r.get('checkin'))} a {data_br(r.get('checkout'))}")
             st.write(f"**Hóspede:** {r.get('nome') or 'Ainda não informado'}")
             st.write(f"**Situação:** {situacao[:-1] if situacao.endswith('s') else situacao}")
             st.caption(f"Identificador: {id_reserva}")
@@ -1002,8 +1073,8 @@ elif menu == "Gerenciar Reservas":
                             d1, d2 = st.columns(2)
                             d1.write(f"**Resort:** {ficha.get('resort') or '—'}")
                             d2.write(f"**Cota:** {ficha.get('cota') or '—'}")
-                            d1.write(f"**Check-in:** {ficha.get('checkin') or '—'}")
-                            d2.write(f"**Check-out:** {ficha.get('checkout') or '—'}")
+                            d1.write(f"**Check-in:** {data_br(ficha.get('checkin'))}")
+                            d2.write(f"**Check-out:** {data_br(ficha.get('checkout'))}")
                             st.write(f"**Situação:** {ficha.get('status') or '—'}")
                             hospede = ficha.get("hospede")
                             if isinstance(hospede, dict):
@@ -1023,6 +1094,21 @@ elif menu == "Gerenciar Reservas":
                                 st.caption(f"Termos aceitos: {hospede.get('versao_termo') or 'Não informado'}")
                             else:
                                 st.info("O cliente ainda não concluiu o formulário de pré-check-in.")
+                            if isinstance(hospede, dict):
+                                try:
+                                    pdf_bytes = gerar_pdf_reserva(ficha)
+                                    st.download_button(
+                                        "Baixar ficha da reserva (PDF)",
+                                        data=pdf_bytes,
+                                        file_name=f"ficha_reserva_{id_reserva[:8]}.pdf",
+                                        mime="application/pdf",
+                                        icon=":material/picture_as_pdf:",
+                                        key=f"pdf_reserva_{id_reserva}",
+                                        use_container_width=True,
+                                    )
+                                    st.caption("Contém dados pessoais. Compartilhe somente com pessoas autorizadas.")
+                                except Exception as erro_pdf:
+                                    st.warning("Não foi possível gerar o PDF. Verifique se a biblioteca reportlab está instalada no aplicativo.")
                     except (RuntimeError, ValueError, TypeError) as erro:
                         st.error(f"Não foi possível consultar os detalhes: {erro}")
                         st.caption("Confira se o SQL de detalhes já foi executado no Supabase.")
