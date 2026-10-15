@@ -979,6 +979,54 @@ elif menu == "Gerenciar Reservas":
             st.write(f"**Hóspede:** {r.get('nome') or 'Ainda não informado'}")
             st.write(f"**Situação:** {situacao[:-1] if situacao.endswith('s') else situacao}")
             st.caption(f"Identificador: {id_reserva}")
+
+            # Consulta individual: dados pessoais nunca entram na listagem geral.
+            aberto = st.session_state.get("detalhes_reserva_aberta") == id_reserva
+            if st.button(
+                "Fechar detalhes" if aberto else "Ver detalhes",
+                key=f"detalhes_{id_reserva}",
+                icon=":material/visibility_off:" if aberto else ":material/visibility:",
+            ):
+                st.session_state["detalhes_reserva_aberta"] = None if aberto else id_reserva
+                st.rerun()
+
+            if aberto:
+                with st.container(border=True):
+                    st.markdown("#### Ficha da reserva")
+                    try:
+                        ficha = chamar_supabase("detalhes_reserva_admin", {"p_reserva_id": str(uuid.UUID(id_reserva))})
+                        if not isinstance(ficha, dict) or not ficha.get("encontrada"):
+                            st.warning("Não foi possível localizar os dados desta reserva.")
+                        else:
+                            st.markdown("**Dados da hospedagem**")
+                            d1, d2 = st.columns(2)
+                            d1.write(f"**Resort:** {ficha.get('resort') or '—'}")
+                            d2.write(f"**Cota:** {ficha.get('cota') or '—'}")
+                            d1.write(f"**Check-in:** {ficha.get('checkin') or '—'}")
+                            d2.write(f"**Check-out:** {ficha.get('checkout') or '—'}")
+                            st.write(f"**Situação:** {ficha.get('status') or '—'}")
+                            hospede = ficha.get("hospede")
+                            if isinstance(hospede, dict):
+                                st.markdown("**Hóspede principal**")
+                                d1, d2 = st.columns(2)
+                                d1.write(f"**Nome:** {hospede.get('nome') or '—'}")
+                                d2.write(f"**CPF:** {hospede.get('cpf') or '—'}")
+                                d1.write(f"**WhatsApp:** {hospede.get('whatsapp') or '—'}")
+                                d2.write(f"**E-mail:** {hospede.get('email') or '—'}")
+                                st.markdown("**Acompanhantes**")
+                                lista = ficha.get("acompanhantes") or []
+                                if lista:
+                                    for pos, acompanhante in enumerate(lista, 1):
+                                        st.write(f"{pos}. **{acompanhante.get('nome') or 'Não informado'}** — CPF: {acompanhante.get('cpf') or 'Não informado'}")
+                                else:
+                                    st.caption("Nenhum acompanhante cadastrado.")
+                                st.caption(f"Termos aceitos: {hospede.get('versao_termo') or 'Não informado'}")
+                            else:
+                                st.info("O cliente ainda não concluiu o formulário de pré-check-in.")
+                    except (RuntimeError, ValueError, TypeError) as erro:
+                        st.error(f"Não foi possível consultar os detalhes: {erro}")
+                        st.caption("Confira se o SQL de detalhes já foi executado no Supabase.")
+
             if r.get("status") in ("pendente", "confirmado"):
                 if r.get("status") == "confirmado":
                     st.warning("Atenção: cancelar aqui não cancela a hospedagem diretamente com o resort. Verifique o procedimento com a GAV.")
