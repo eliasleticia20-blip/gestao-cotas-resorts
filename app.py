@@ -90,7 +90,64 @@ def validar_cpf(cpf):
 
 
 def tela_cliente(token):
-    st.title("Confirmação de reserva | Salinas Resorts")
+    # Estilo exclusivo do link do hóspede; não modifica o painel administrativo.
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap');
+    :root { color-scheme: light; }
+    .stApp {
+        background: linear-gradient(120deg,rgba(5,32,54,.23),rgba(9,45,67,.08) 42%,rgba(8,38,60,.30)),
+          url('https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=2000&q=90') center center / cover fixed !important;
+        font-family: 'DM Sans', sans-serif !important;
+    }
+    [data-testid="stHeader"] { background: transparent !important; }
+    [data-testid="stDecoration"] { display:none; }
+    [data-testid="stSidebar"] { display:none !important; }
+    .block-container {
+        max-width: 980px !important;
+        margin: 70px auto 70px !important;
+        padding: 35px clamp(20px,4vw,48px) 42px !important;
+        background: rgba(255,255,255,.97) !important;
+        border: 1px solid rgba(255,255,255,.75);
+        border-radius: 26px;
+        box-shadow: 0 26px 80px rgba(3,27,48,.25);
+    }
+    .client-brand { text-align:center; color:#10395a; font-size:.78rem; font-weight:800; letter-spacing:.28em; margin:0 0 16px; }
+    .client-brand span { color:#ba9250; }
+    .client-head { text-align:center; margin-bottom:24px; }
+    .client-kicker { color:#b28a49; letter-spacing:.24em; font-size:.73rem; font-weight:800; text-transform:uppercase; }
+    .client-head h1 { color:#0c3554 !important; font-family:'Playfair Display',Georgia,serif !important; font-size:clamp(2rem,4.2vw,3.1rem) !important; line-height:1.18 !important; margin:9px 0 !important; font-weight:700 !important; }
+    .client-head p { color:#60768b; font-size:.95rem; margin:0; }
+    .booking-summary { display:grid; grid-template-columns:1.2fr .65fr 1.4fr; background:#eaf3fa; border:1px solid #dcebf5; border-radius:16px; padding:19px 20px; margin:18px 0 17px; gap:14px; }
+    .booking-detail { padding:0 12px; border-right:1px solid #cbdde9; min-width:0; }
+    .booking-detail:last-child { border-right:none; }
+    .booking-detail .small { font-size:.75rem; color:#637e93; margin-bottom:6px; }
+    .booking-detail .value { font-size:1rem; font-weight:800; color:#10395a; overflow-wrap:anywhere; }
+    .client-note { background:#f5f9fc; border-left:3px solid #c49a55; padding:11px 15px; border-radius:7px; font-size:.82rem; color:#4f6477; margin-bottom:23px; }
+    .client-section { background:linear-gradient(90deg,#f4e8d3,#fbf7f0); color:#123c5d; border-radius:12px; padding:12px 17px; font-weight:800; font-size:1.05rem; margin:15px 0 15px; }
+    .client-section .gold { color:#b38b4a; margin-right:8px; }
+    [data-testid="stForm"] { border:none !important; padding:0 !important; background:transparent !important; }
+    [data-testid="stWidgetLabel"] p, label p { font-family:'DM Sans',sans-serif !important; font-weight:600 !important; color:#173d5c !important; }
+    div[data-baseweb="input"] > div { background:#fff !important; border:1px solid #d3dfe8 !important; border-radius:11px !important; min-height:51px; }
+    div[data-baseweb="input"] input { color:#173d5c !important; }
+    div[data-baseweb="input"] > div:focus-within { border-color:#2877a9 !important; box-shadow:0 0 0 2px rgba(40,119,169,.10); }
+    [data-testid="stNumberInput"] { padding:12px 16px; background:#f5f9fc; border-radius:12px; margin-bottom:10px; }
+    [data-testid="stFormSubmitButton"] button { background:linear-gradient(90deg,#07517d,#0d3d65) !important; color:#fff !important; border:none !important; border-radius:13px !important; min-height:58px !important; font-size:1.08rem !important; font-weight:800 !important; box-shadow:0 9px 24px rgba(5,64,102,.20); }
+    [data-testid="stFormSubmitButton"] button:hover { background:#0c6594 !important; }
+    [data-testid="stCheckbox"] { margin:12px 0; }
+    .client-footer { text-align:center; color:#688094; font-size:.77rem; margin-top:20px; }
+    @media(max-width:700px) {
+      .stApp { background-attachment:scroll !important; background-position:60% center !important; }
+      .block-container { margin:20px 10px 30px !important; padding:23px 17px 27px !important; border-radius:19px !important; }
+      .booking-summary { grid-template-columns:1fr 1fr; gap:15px 8px; padding:16px 10px; }
+      .booking-detail { padding:0 8px; }
+      .booking-detail:nth-child(2) { border-right:none; }
+      .booking-detail:last-child { grid-column:1 / -1; border-top:1px solid #cbdde9; padding-top:12px; }
+      .client-head h1 { font-size:2rem !important; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    st.markdown('<div class="client-brand">SALINAS <span>RESORTS</span></div><div class="client-head"><div class="client-kicker">Sua próxima experiência começa aqui</div><h1>Confirmação de Reserva</h1><p>Preencha seus dados para concluir sua hospedagem.</p></div>', unsafe_allow_html=True)
     try:
         reserva = chamar_supabase("consultar_link_reserva", {"p_token": str(uuid.UUID(token))})
     except (ValueError, RuntimeError) as erro:
@@ -99,20 +156,43 @@ def tela_cliente(token):
     if not reserva.get("valido"):
         st.warning("Este link é inválido, expirou ou já foi utilizado.")
         st.stop()
-    st.info(f"{reserva['resort']} | Cota {reserva['cota']} | {reserva['checkin']} a {reserva['checkout']}")
-    st.caption("O envio confirma a reserva automaticamente, sujeito à disponibilidade no momento da confirmação.")
-    # Fora do formulario para que os campos sejam atualizados ao clicar em + ou -.
-    qtd = st.number_input("Quantidade de acompanhantes", min_value=0, max_value=7, value=0, step=1, key="qtd_acompanhantes")
+    def data_cliente(valor):
+        try:
+            return datetime.strptime(str(valor)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except (ValueError, TypeError):
+            return str(valor)
+    resort_html = html.escape(str(reserva['resort']))
+    cota_html = html.escape(str(reserva['cota']))
+    periodo_html = html.escape(f"{data_cliente(reserva['checkin'])} a {data_cliente(reserva['checkout'])}")
+    st.markdown(f"""<div class="booking-summary">
+      <div class="booking-detail"><div class="small">RESORT</div><div class="value">{resort_html}</div></div>
+      <div class="booking-detail"><div class="small">COTA</div><div class="value">{cota_html}</div></div>
+      <div class="booking-detail"><div class="small">PERÍODO DA ESTADIA</div><div class="value">{periodo_html}</div></div>
+    </div><div class="client-note">A confirmação é registrada automaticamente, sujeita à disponibilidade no momento do envio.</div>""", unsafe_allow_html=True)
+    st.markdown('<div class="client-section"><span class="gold">✦</span> Pessoas na hospedagem</div>', unsafe_allow_html=True)
+    qtd = st.number_input("Quantidade de acompanhantes (além do hóspede principal, máximo de 7)", min_value=0, max_value=7, value=0, step=1, key="qtd_acompanhantes")
+    st.markdown('<div class="client-section"><span class="gold">✦</span> Dados do hóspede principal</div>', unsafe_allow_html=True)
     with st.form("confirmacao_cliente"):
-        nome = st.text_input("Nome completo do hóspede principal")
-        cpf = st.text_input("CPF do hóspede principal")
-        whatsapp = st.text_input("WhatsApp com DDD")
-        email = st.text_input("E-mail")
+        nome = st.text_input("Nome completo do hóspede principal *", placeholder="Digite seu nome completo")
+        col_cpf, col_whats = st.columns(2)
+        with col_cpf:
+            cpf = st.text_input("CPF do hóspede principal *", placeholder="000.000.000-00")
+        with col_whats:
+            whatsapp = st.text_input("WhatsApp com DDD *", placeholder="(00) 00000-0000")
+        email = st.text_input("E-mail *", placeholder="seuemail@exemplo.com")
         acompanhantes = []
+        if qtd:
+            st.markdown('<div class="client-section"><span class="gold">✦</span> Dados dos acompanhantes</div>', unsafe_allow_html=True)
         for i in range(int(qtd)):
             st.markdown(f"**Acompanhante {i + 1}**")
-            acompanhantes.append({"nome": st.text_input("Nome completo", key=f"nome_ac_{i}"), "cpf": st.text_input("CPF (se possuir)", key=f"cpf_ac_{i}")})
-        st.markdown("**Termos da reserva (versão v1-2026-10)**")
+            col_nome, col_cpf_ac = st.columns([1.4, 1])
+            with col_nome:
+                nome_ac = st.text_input("Nome completo", key=f"nome_ac_{i}")
+            with col_cpf_ac:
+                cpf_ac = st.text_input("CPF (se possuir)", key=f"cpf_ac_{i}")
+            acompanhantes.append({"nome": nome_ac, "cpf": cpf_ac})
+        st.markdown('<div class="client-section"><span class="gold">✦</span> Termos da reserva</div>', unsafe_allow_html=True)
+        st.caption("Termos da reserva (versão v1-2026-10)")
         st.write("Confira resort, cota, datas e dados antes de confirmar. A confirmação deste formulário registra a solicitação no sistema. Condições de pagamento, alteração e cancelamento devem constar do acordo fornecido pelo responsável pela reserva.")
         aceite = st.checkbox("Li e aceito os termos apresentados e autorizo o tratamento dos dados informados para organizar a hospedagem.")
         enviar = st.form_submit_button("Confirmar reserva", type="primary", use_container_width=True)
@@ -130,6 +210,7 @@ def tela_cliente(token):
                 st.balloons()
             except RuntimeError as erro:
                 st.error(f"Reserva não confirmada: {erro}")
+    st.markdown('<div class="client-footer">SALINAS RESORTS · Conforto e tranquilidade para sua estadia</div>', unsafe_allow_html=True)
     st.stop()
 
 
