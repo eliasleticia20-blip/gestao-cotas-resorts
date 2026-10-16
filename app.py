@@ -113,6 +113,7 @@ ARQUIVOS_PDF = {
     'Exclusive Resort': 'Exclusive Resort.pdf',
     'Park Resort': 'Park Resort.pdf',
     'Premium Resort': 'Premium Resort.pdf',
+    'Aqualand': 'Aqualand.pdf',
 }
 DATA_RE = re.compile(r'^\d{2}/\d{2}/\d{4}$')
 
@@ -172,6 +173,52 @@ def ler_pagina(page, resort, numero_pagina):
     return linhas, None
 
 
+def ler_aqualand(pagina, numero_pagina):
+    """Lê as 3 tabelas paralelas do Aqualand: cotas A-Z, datas e ano por coluna."""
+    meses = {"jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+             "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12}
+    palavras = pagina.get_text("words")
+    registros = []
+    problemas = []
+    # A tabela usa três blocos independentes, cada um com sua coluna Cota e Ano.
+    for inicio_x, fim_x in ((95, 231), (231, 363), (363, 500)):
+        letras = [w for w in palavras if inicio_x <= w[0] < inicio_x + 18
+                  and re.fullmatch(r"[A-Z]", w[4]) and w[1] > 80]
+        anos = [w for w in palavras if inicio_x + 62 <= w[0] < inicio_x + 86
+                and re.fullmatch(r"20\d{2}", w[4])]
+        datas = [w for w in palavras if inicio_x + 18 <= w[0] < inicio_x + 58
+                 and re.fullmatch(r"\d{2}/[a-z]{3}", w[4].lower())]
+        for ano in anos:
+            y = (ano[1] + ano[3])/2
+            letra = min(letras, key=lambda w: abs((w[1]+w[3])/2-y), default=None)
+            if letra is None or abs((letra[1]+letra[3])/2-y) > 10:
+                continue
+            linha_datas = [w for w in datas if abs((w[1]+w[3])/2-y) < 4.5]
+            datas_ano = sorted((w for w in linha_datas if ano[0]-60 < w[0] < ano[0]-16), key=lambda w:w[0])
+            entrada = datas_ano[0][4] if len(datas_ano) >= 2 else None
+            saida = datas_ano[1][4] if len(datas_ano) >= 2 else None
+            if not entrada or not saida:
+                problemas.append(f"Aqualand: página {numero_pagina}, cota {letra[4]} sem datas completas")
+                continue
+            try:
+                def converter(valor, ano_base):
+                    dia, mes = valor.lower().split('/')
+                    return datetime(int(ano_base), meses[mes], int(dia))
+                di = converter(entrada, ano[4])
+                df = converter(saida, ano[4])
+                if df <= di:
+                    df = converter(saida, int(ano[4]) + 1)
+                if not 0 < (df-di).days <= 35:
+                    raise ValueError('intervalo fora do esperado')
+            except (ValueError, KeyError) as exc:
+                problemas.append(f"Aqualand: página {numero_pagina}, cota {letra[4]}, datas inválidas: {exc}")
+                continue
+            registros.append({'Cota': letra[4], 'Check-in': di, 'Check-out': df,
+                              'Período': '', 'Local': 'Cronograma Aqualand',
+                              'Página PDF': numero_pagina})
+    return registros, problemas
+
+
 def carregar_pdfs(diretorio='.'):
     dados={}
     avisos=[]
@@ -188,11 +235,16 @@ def carregar_pdfs(diretorio='.'):
                     # Páginas de capa e divisórias não possuem tabelas.
                     if 'CHECK-IN' not in pagina.get_text():
                         continue
-                    linhas,erro=ler_pagina(pagina,resort,indice+1)
-                    if erro:
-                        avisos.append(erro)
-                    else:
+                    if resort == 'Aqualand':
+                        linhas, erros = ler_aqualand(pagina, indice+1)
+                        avisos.extend(erros)
                         registros.extend(linhas)
+                    else:
+                        linhas,erro=ler_pagina(pagina,resort,indice+1)
+                        if erro:
+                            avisos.append(erro)
+                        else:
+                            registros.extend(linhas)
         except Exception as exc:
             avisos.append(f'Erro ao abrir {arquivo}: {exc}')
         if registros:
@@ -1617,7 +1669,7 @@ elif menu == "Cadastros":
                 for i in range(st.session_state["qtd_novos_vinculos"]):
                     if i > 0:
                         st.markdown(f"**Apartamento / cota {i + 1}**")
-                    resort_i = st.selectbox("Resort *", list(ARQUIVOS_RESORTS.keys()) + ["Aqualand", "Outro / não identificado"], key=f"novo_resort_{i}")
+                    resort_i = st.selectbox("Resort *", list(ARQUIVOS_RESORTS.keys()) + ["Outro / não identificado"], key=f"novo_resort_{i}")
                     locais_i = list(base_dados.get(resort_i, {}).keys())
                     if locais_i:
                         local_i = st.selectbox("Bloco / torre *", locais_i + ["Outro / conferir manualmente"], key=f"novo_local_{i}")
@@ -1633,7 +1685,7 @@ elif menu == "Cadastros":
                     uh_i = st.text_input("UH (unidade habitacional)", key=f"novo_uh_{i}")
                     tipo_uh_i = st.text_input("Tipo de UH", key=f"novo_tipo_uh_{i}")
                     contrato_i = st.text_input("Contrato", key=f"novo_contrato_{i}")
-                    cota_i = st.text_input("Número da cota *", key=f"novo_cota_{i}")
+                    cota_i = st.text_input("Cota (número ou letra) *", key=f"novo_cota_{i}")
                     obs_i = st.text_area("Observações do vínculo", key=f"novo_obs_{i}")
                     novos_vinculos.append({"cotista_id": cotista_atual["id"], "resort": resort_i, "local": local_i, "apartamento": apartamento_i.strip(), "andar": andar_i.strip(), "uh": uh_i, "tipo_uh": tipo_uh_i, "contrato": contrato_i, "cota": cota_i.strip(), "observacoes": obs_i})
                     if i < st.session_state["qtd_novos_vinculos"] - 1:
