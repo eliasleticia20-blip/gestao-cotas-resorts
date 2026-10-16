@@ -1248,26 +1248,96 @@ elif menu == "Cronogramas":
 # ------------------------------------------------------------
 elif menu == "Cadastros":
     st.markdown('<div class="section-heading">Cadastro de cotistas</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-subtitle">Área preparada para organizar os dados de contato dos cotistas.</div>',
-        unsafe_allow_html=True,
-    )
-    st.info("Nesta versão, os cadastros ainda não são gravados permanentemente. Para evitar perda de informações, o formulário abaixo é apenas demonstrativo até definirmos onde os dados serão armazenados.")
+    st.caption("Cadastre responsáveis e vincule cada cota à unidade correta. Informações restritas ao painel administrativo.")
+    try:
+        cotistas = chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "listar", "p_dados": {}})
+        if not isinstance(cotistas, list):
+            raise RuntimeError("Resposta inesperada do cadastro.")
+    except RuntimeError as erro:
+        st.error(f"Cadastro indisponível: {erro}")
+        st.info("Execute primeiro o arquivo cadastro_cotistas_supabase.sql no Supabase. O SUPABASE_KEY deve ser a chave service_role, mantida apenas nos Secrets.")
+        st.stop()
 
-    with st.container(border=True):
-        with st.form("form_cotista"):
-            nome_cotista = st.text_input("Nome do cotista")
-            numero_cota = st.text_input("Número da cota")
-            telefone = st.text_input("Telefone / WhatsApp")
-            resort_cadastro = st.selectbox("Resort relacionado", list(ARQUIVOS_RESORTS.keys()))
-            observacoes = st.text_area("Observações", placeholder="Informações adicionais (opcional)")
-            enviado = st.form_submit_button("Validar cadastro", type="primary", use_container_width=True)
+    st.metric("Cotistas cadastrados", len(cotistas))
+    pesquisa = st.text_input("Pesquisar cotista ou cota", placeholder="Nome, telefone, resort, apartamento ou cota")
+    termo = pesquisa.strip().casefold()
+    exibidos = [c for c in cotistas if not termo or termo in json.dumps(c, ensure_ascii=False).casefold()]
+    opcoes = {f"{c['nome']} · {str(c['id'])[:8]}": c for c in cotistas}
+    aba_lista, aba_novo, aba_editar, aba_vinculo = st.tabs(["Consultar", "Novo cotista", "Editar cotista", "Vincular cota"])
 
-        if enviado:
-            if not nome_cotista.strip() or not numero_cota.strip():
-                st.error("Preencha pelo menos o nome do cotista e o número da cota.")
-            else:
-                st.success("Dados validados nesta sessão. Eles ainda não foram salvos em um banco de dados.")
+    with aba_lista:
+        if not exibidos:
+            st.info("Nenhum cotista encontrado.")
+        for c in exibidos:
+            with st.expander(f"{c['nome']} · {len(c.get('vinculos') or [])} cota(s)"):
+                st.write(f"**WhatsApp:** {c.get('telefone') or 'Não informado'}")
+                if c.get('observacoes'):
+                    st.write(f"**Observações:** {c['observacoes']}")
+                for v in c.get('vinculos') or []:
+                    col_desc, col_del = st.columns([5, 1])
+                    col_desc.write(f"{v['resort']} · {v['local']} · Apto {v['apartamento']} · Cota {v['cota']}")
+                    if col_del.button("Desvincular", key=f"desv_{v['id']}"):
+                        try:
+                            chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "desvincular", "p_dados": {"id": v['id']}})
+                            st.rerun()
+                        except RuntimeError as erro:
+                            st.error(str(erro))
+                if not c.get('vinculos'):
+                    st.caption("Nenhuma cota vinculada.")
+
+    with aba_novo:
+        with st.form("novo_cotista", clear_on_submit=True):
+            nome = st.text_input("Nome completo *")
+            telefone = st.text_input("WhatsApp / telefone")
+            observacoes = st.text_area("Observações")
+            salvar = st.form_submit_button("Salvar cotista", type="primary")
+        if salvar:
+            try:
+                chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "salvar", "p_dados": {"nome": nome, "telefone": telefone, "observacoes": observacoes}})
+                st.success("Cotista cadastrado!")
+                st.rerun()
+            except RuntimeError as erro:
+                st.error(str(erro))
+
+    with aba_editar:
+        if not opcoes:
+            st.info("Cadastre um cotista primeiro.")
+        else:
+            escolha = st.selectbox("Selecione o cotista", list(opcoes), key="editar_cotista")
+            c = opcoes[escolha]
+            with st.form(f"editar_form_{c['id']}"):
+                nome = st.text_input("Nome *", value=c.get('nome') or '')
+                telefone = st.text_input("WhatsApp / telefone", value=c.get('telefone') or '')
+                observacoes = st.text_area("Observações", value=c.get('observacoes') or '')
+                salvar = st.form_submit_button("Salvar alterações", type="primary")
+            if salvar:
+                try:
+                    chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "salvar", "p_dados": {"id": c['id'], "nome": nome, "telefone": telefone, "observacoes": observacoes}})
+                    st.success("Cadastro atualizado!")
+                    st.rerun()
+                except RuntimeError as erro:
+                    st.error(str(erro))
+
+    with aba_vinculo:
+        if not opcoes:
+            st.info("Cadastre um cotista primeiro.")
+        else:
+            with st.form("vincular_cota"):
+                escolha = st.selectbox("Responsável *", list(opcoes))
+                resort = st.selectbox("Resort *", list(ARQUIVOS_RESORTS.keys()) + ["Aqualand", "Outro / não identificado"])
+                locais = list(base_dados.get(resort, {}).keys())
+                local = st.selectbox("Bloco / torre *", locais + ["Outro / conferir manualmente"]) if locais else st.text_input("Bloco / torre *")
+                apartamento = st.text_input("Apartamento / UH *", placeholder="Ex.: 809 ou 1309-1")
+                cota = st.text_input("Número da cota *", placeholder="Ex.: 10")
+                obs = st.text_area("Observações do vínculo", placeholder="Ex.: frente mar, 2 quartos, identificação pendente")
+                vincular = st.form_submit_button("Vincular cota", type="primary")
+            if vincular:
+                try:
+                    chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "vincular", "p_dados": {"cotista_id": opcoes[escolha]['id'], "resort": resort, "local": local, "apartamento": apartamento, "cota": cota, "observacoes": obs}})
+                    st.success("Cota vinculada ao responsável!")
+                    st.rerun()
+                except RuntimeError as erro:
+                    st.error(str(erro))
 
 # ------------------------------------------------------------
 # RODAPE
