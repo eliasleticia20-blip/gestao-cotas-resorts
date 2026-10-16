@@ -881,8 +881,10 @@ elif menu == "Consultar cotas":
                                 'resort': nome_resort,
                                 'cota': cota_id,
                                 'aba': nome_aba,
-                                'entrada': inicio.strftime('%d/%m/%Y'),
-                                'saida': fim.strftime('%d/%m/%Y'),
+                                'entrada': data_entrada.strftime('%d/%m/%Y'),
+                                'saida': data_saida.strftime('%d/%m/%Y'),
+                                'cronograma_entrada': inicio.strftime('%d/%m/%Y'),
+                                'cronograma_saida': fim.strftime('%d/%m/%Y'),
                                 'detalhes': f"Cota {linha['Cota']} • {nome_aba} • {linha['Período'] or 'Período comum'} • Página {linha['Página PDF']} do PDF",
                             })
             st.markdown("---")
@@ -901,7 +903,7 @@ elif menu == "Consultar cotas":
                 st.markdown(f'<div class="metric-card"><div class="metric-label">PDFs com dados</div><div class="metric-value">{total_resorts_com_dados}</div></div>', unsafe_allow_html=True)
 
             if resultados:
-                st.caption("Os períodos vêm dos PDFs; a ocupação é consultada no Supabase a cada atualização da página.")
+                st.caption("A busca aceita estadias dentro dos períodos dos PDFs. Somente as datas solicitadas serão reservadas; os dias restantes poderão ser reservados separadamente. A ocupação é consultada no Supabase.")
                 try:
                     reservas_atuais = chamar_supabase("listar_reservas_admin", {})
                     if isinstance(reservas_atuais, str):
@@ -924,6 +926,7 @@ elif menu == "Consultar cotas":
                     if not disponivel and st.session_state.get("cota_selecionada") == item:
                         st.session_state.pop("cota_selecionada", None)
                         st.session_state.pop("link_gerado", None)
+                        st.session_state.pop("link_gerado_para", None)
                     with st.container(border=True):
                         topo_nome, topo_status, topo_botao = st.columns(
                             [3, 1.7, 2.2], vertical_alignment="center"
@@ -951,16 +954,17 @@ elif menu == "Consultar cotas":
                             ):
                                 st.session_state["cota_selecionada"] = item
                                 st.session_state.pop("link_gerado", None)
+                                st.session_state.pop("link_gerado_para", None)
 
                         st.markdown(
                             f"""
                             <div class="result-details">
                                 <div class="detail-box">
-                                    <div class="detail-label">CHECK-IN CADASTRADO</div>
+                                    <div class="detail-label">CHECK-IN SOLICITADO</div>
                                     <div class="detail-value">{html.escape(str(item['entrada']))}</div>
                                 </div>
                                 <div class="detail-box">
-                                    <div class="detail-label">CHECK-OUT CADASTRADO</div>
+                                    <div class="detail-label">CHECK-OUT SOLICITADO</div>
                                     <div class="detail-value">{html.escape(str(item['saida']))}</div>
                                 </div>
                                 <div class="detail-box">
@@ -969,6 +973,8 @@ elif menu == "Consultar cotas":
                                 </div>
                             </div>
                             <p style="color:#667789;font-size:.84rem;margin:14px 0 0 0;">
+                                <strong>Período completo do cronograma:</strong>
+                                {html.escape(str(item['cronograma_entrada']))} a {html.escape(str(item['cronograma_saida']))}<br>
                                 {html.escape(str(item['detalhes']))}
                             </p>
                             """,
@@ -992,9 +998,10 @@ elif menu == "Consultar cotas":
                                         "p_checkout": datetime.strptime(item["saida"], "%d/%m/%Y").date().isoformat(),
                                     })
                                     st.session_state["link_gerado"] = f"{config_segura('APP_URL').rstrip('/')}?{urlencode({'reserva': token})}"
+                                    st.session_state["link_gerado_para"] = item
                                 except RuntimeError as erro:
                                     st.error(f"Não foi possível gerar o link: {erro}")
-                            if st.session_state.get("link_gerado"):
+                            if st.session_state.get("link_gerado") and st.session_state.get("link_gerado_para") == item:
                                 st.code(st.session_state["link_gerado"], language=None)
                                 st.caption("Copie e envie ao cliente pelo WhatsApp.")
             else:
