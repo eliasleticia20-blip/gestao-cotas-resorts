@@ -659,6 +659,99 @@ st.markdown(
     .resort-name { font-weight:700; color:#17395c; }
     .resort-meta { color:#78889a; font-size:.77rem; }
     @media(max-width:700px){ .hero {padding:34px 22px;min-height:260px;} .home-panel {padding:14px;} }
+
+    /* Tema resort premium — aplicado somente ao painel administrativo */
+    .stApp {
+      background:
+        linear-gradient(180deg,rgba(246,249,252,.12) 0%,#f7f4ef 850px),
+        url('https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=2000&q=85')
+        center top / 100% auto no-repeat !important;
+    }
+    [data-testid="stHeader"] { background:transparent !important; }
+    [data-testid="stSidebar"] {
+      background:linear-gradient(165deg,#041b38,#092746 55%,#03152e) !important;
+      border-right:1px solid rgba(214,170,98,.24) !important;
+    }
+    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
+      background:linear-gradient(90deg,rgba(205,159,82,.34),rgba(255,255,255,.10)) !important;
+      border-left:4px solid #e2b86d !important;
+    }
+    .side-name {letter-spacing:.2em !important; font-size:1.95rem !important;}
+    .side-small {color:#f8f8f8 !important;letter-spacing:.44em !important;}
+    .side-caption {color:#e1bf85 !important;}
+    .resort-search-hero {
+      position:relative; min-height:230px; padding:35px 30px 22px;
+      display:flex; flex-direction:column; justify-content:center;
+      margin:-5px -8px 0; border-radius:0 0 16px 16px;
+      background:linear-gradient(90deg,rgba(247,250,252,.96),rgba(244,250,254,.82) 44%,rgba(255,255,255,.02) 85%),
+        url('https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1800&q=90')
+        center 55% / cover;
+    }
+    .resort-search-hero .eyebrow {font-size:.85rem;letter-spacing:.38em;color:#112c4e;font-weight:600;}
+    .resort-search-hero h1 {font-family:'DM Sans',sans-serif !important; font-weight:800;
+      font-size:clamp(2rem,3.7vw,3.5rem);letter-spacing:-.035em;line-height:1.13;
+      color:#071f40 !important;margin:10px 0 7px;}
+    .resort-search-hero h1 span {color:#b9893b;}
+    .resort-search-hero p {color:#3e5875;font-size:1rem;max-width:510px;line-height:1.5;margin:0;}
+    .resort-search-card-marker {height:0;margin:0;}
+    /* Agrupa visualmente os widgets reais sem substituí-los por imagem */
+    div[data-testid="stVerticalBlock"]:has(> div > div.resort-search-card-marker) {
+      background:rgba(255,255,255,.97);border:1px solid rgba(255,255,255,.9);
+      padding:22px 26px 24px;border-radius:22px;
+      box-shadow:0 16px 44px rgba(13,39,65,.13);margin-top:-10px;
+      position:relative;z-index:1;
+    }
+    /* Abas de pesquisa */
+    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) > div[role="radiogroup"] {
+      display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;
+    }
+    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) label {
+      background:#f0f3f7;border:1px solid #e3e8ee;border-radius:12px;
+      padding:14px 18px;min-height:62px;display:flex;align-items:center;
+      font-weight:800;transition:.15s;
+    }
+    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) label:has(input:checked) {
+      background:linear-gradient(100deg,#082448,#146093);border-color:#b9904b;
+      box-shadow:0 5px 14px rgba(5,42,78,.18);
+    }
+    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) label:has(input:checked) p {
+      color:#fff !important;
+    }
+    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) > label {display:none;}
+    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) label p {font-weight:800;}
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {
+      border:0 !important;background:transparent !important;box-shadow:none !important;
+      padding:5px 0 !important;
+    }
+    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div,
+    [data-testid="stDateInput"] div[data-baseweb="input"] > div {
+      background:#fff !important;border:1px solid #d8e0e9 !important;
+      border-radius:10px !important;min-height:45px;
+    }
+    div.stButton > button[kind="primary"] {
+      background:linear-gradient(100deg,#06284f,#0b5289 65%,#2077b0) !important;
+      border:1px solid #c69a52 !important;border-left:4px solid #d8a957 !important;
+      min-height:56px !important;border-radius:11px !important;
+      font-weight:800 !important;text-transform:uppercase;
+      box-shadow:0 7px 20px rgba(8,52,89,.18) !important;
+    }
+    .resort-benefits {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:24px 0;}
+    .resort-benefit {display:flex;gap:12px;align-items:center;padding:17px 13px;background:rgba(255,255,255,.96);
+      border:1px solid #edf0f2;border-radius:16px;box-shadow:0 8px 24px rgba(19,41,60,.07);}
+    .resort-benefit .glyph {width:54px;height:54px;flex-shrink:0;border-radius:50%;
+      display:flex;align-items:center;justify-content:center;background:#f8e8cc;color:#9b6a25;font-size:25px;}
+    .resort-benefit strong {display:block;color:#0b2a50;font-size:.88rem;}
+    .resort-benefit small {display:block;color:#64758b;font-size:.76rem;line-height:1.45;margin-top:4px;}
+    .resort-search-footer {text-align:center;color:#8594a4;font-size:.8rem;margin:16px 0 20px;}
+    @media(max-width:850px) {
+      .resort-benefits {grid-template-columns:repeat(2,minmax(0,1fr));}
+      .resort-search-hero {min-height:210px;padding:26px 18px;}
+    }
+    @media(max-width:600px) {
+      .resort-benefits {grid-template-columns:1fr;}
+      .resort-search-hero h1 {font-size:2rem;}
+      div[data-testid="stVerticalBlock"]:has(> div > div.resort-search-card-marker) {padding:14px;}
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -776,10 +869,6 @@ def normalizar_local_cota(local):
             return ("torre", "atalaia")
         if "corvina" in nome:
             return ("torre", "corvina")
-        # Alias específico para o nome usado no cadastro e no cronograma.
-        # Não afeta Atalaia, Corvina ou Maçarico.
-        if nome in ("farol", "farol velho"):
-            return ("torre", "farol")
         return ("torre", nome)
     bloco = re.search(r"\bbloco\s*0*(\d+)\b", texto)
     if bloco:
@@ -901,10 +990,11 @@ if menu == "Início":
 # CONSULTA
 # ------------------------------------------------------------
 elif menu == "Consultar cotas":
-    st.markdown('<div class="section-heading">Planeje sua próxima estadia</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-subtitle">Escolha seu resort, selecione as datas e descubra os períodos cadastrados para sua viagem.</div>',
-        unsafe_allow_html=True,
+        '<section class="resort-search-hero"><div class="eyebrow">PLANEJE SUA</div>'
+        '<h1>PRÓXIMA <span>ESTADIA</span></h1>'
+        '<p>Escolha seu resort, selecione as datas e descubra os períodos cadastrados para sua viagem.</p>'
+        '</section>', unsafe_allow_html=True,
     )
 
     modo_consulta = st.radio(
@@ -956,6 +1046,16 @@ elif menu == "Consultar cotas":
                 data_saida = st.date_input("Check-out", value=date.today(), format="DD/MM/YYYY")
             buscar = st.button("Buscar cotas no período", icon=":material/search:", type="primary", use_container_width=True)
 
+    st.markdown(
+        '<div class="resort-benefits">'
+        '<div class="resort-benefit"><span class="glyph">☂</span><div><strong>Diversos Resorts</strong><small>Encontre opções de hospedagem</small></div></div>'
+        '<div class="resort-benefit"><span class="glyph">▦</span><div><strong>Cotas Atualizadas</strong><small>Consulte os cronogramas disponíveis</small></div></div>'
+        '<div class="resort-benefit"><span class="glyph">♢</span><div><strong>Gestão Segura</strong><small>Reservas organizadas com segurança</small></div></div>'
+        '<div class="resort-benefit"><span class="glyph">♧</span><div><strong>Experiência Incrível</strong><small>Planeje sua viagem com facilidade</small></div></div>'
+        '</div><div class="resort-search-footer">〰 &nbsp; Salinas Resorts · Painel administrativo de consulta de cotas</div>',
+        unsafe_allow_html=True,
+    )
+
     if buscar:
         st.session_state["busca_ativa"] = True
         st.session_state["busca_modo_executado"] = modo_consulta
@@ -1002,16 +1102,10 @@ elif menu == "Consultar cotas":
                             })
             st.markdown("---")
             st.markdown('<div class="section-heading">Resultado da consulta</div>', unsafe_allow_html=True)
-            if modo_consulta == "Pesquisar por cotista":
-                st.markdown(
-                    f'<div class="section-subtitle">Cotista: {html.escape(str(cotista_escolhido.get("nome") or ""))} · Períodos futuros a partir de {date.today().strftime("%d/%m/%Y")}</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    f'<div class="section-subtitle">Período solicitado: {data_entrada.strftime("%d/%m/%Y")} a {data_saida.strftime("%d/%m/%Y")}</div>',
-                    unsafe_allow_html=True,
-                )
+            st.markdown(
+                f'<div class="section-subtitle">Período solicitado: {data_entrada.strftime("%d/%m/%Y")} a {data_saida.strftime("%d/%m/%Y")}</div>',
+                unsafe_allow_html=True,
+            )
 
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -1022,32 +1116,7 @@ elif menu == "Consultar cotas":
                 st.markdown(f'<div class="metric-card"><div class="metric-label">PDFs com dados</div><div class="metric-value">{total_resorts_com_dados}</div></div>', unsafe_allow_html=True)
 
             if modo_consulta == "Pesquisar por cotista" and not resultados:
-                vinculos_pesquisados = cotista_escolhido.get("vinculos") or []
-                chaves_cotista = {
-                    chave_vinculo(v.get("resort"), v.get("local"), v.get("cota"))
-                    for v in vinculos_pesquisados
-                }
-                historicos = []
-                for resort_pdf, locais_pdf in base_dados.items():
-                    for local_pdf, tabela_pdf in locais_pdf.items():
-                        for _, registro_pdf in tabela_pdf.iterrows():
-                            if chave_vinculo(resort_pdf, local_pdf, registro_pdf["Cota"]) in chaves_cotista:
-                                historicos.append(registro_pdf)
-                if historicos:
-                    ultima_saida = max(r["Check-out"].date() for r in historicos)
-                    st.warning(
-                        "As cotas deste cadastro foram encontradas nos cronogramas, "
-                        "mas não há períodos futuros cadastrados nos PDFs carregados. "
-                        f"A última saída encontrada é {ultima_saida.strftime('%d/%m/%Y')}. "
-                        "É necessário atualizar o cronograma PDF para pesquisar novas datas."
-                    )
-                else:
-                    st.warning(
-                        "Não encontrei nos PDFs uma correspondência entre resort, torre/bloco e cota. "
-                        "Para o Park Resort, Torre Farol e Torre Farol Velho são tratadas como "
-                        "a mesma torre nesta pesquisa. As demais torres continuam separadas. "
-                        "Confira os vínculos em Cadastros e os dados dos PDFs."
-                    )
+                st.warning("Não encontrei períodos futuros nos PDFs que correspondam exatamente ao resort, à torre/bloco e à cota desse cadastro. Confira os vínculos em Cadastros. Não associei cotas de torres diferentes automaticamente.")
             if resultados:
                 st.caption("A busca aceita estadias dentro dos períodos dos PDFs. Somente as datas solicitadas serão reservadas; os dias restantes poderão ser reservados separadamente. A ocupação é consultada no Supabase.")
                 try:
