@@ -701,24 +701,48 @@ st.markdown(
       box-shadow:0 16px 44px rgba(13,39,65,.13);margin-top:-10px;
       position:relative;z-index:1;
     }
-    /* Abas de pesquisa */
-    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) > div[role="radiogroup"] {
-      display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;
+    /* Seletor premium isolado na página Consultar cotas */
+    .st-key-modo_pesquisa_premium {
+      background:rgba(255,255,255,.98) !important;
+      border:1px solid #e2e8f0 !important;
+      border-radius:16px !important;
+      padding:18px 20px 20px !important;
+      box-shadow:0 10px 28px rgba(5,31,60,.14) !important;
+      margin-top:12px !important;
+      margin-bottom:16px !important;
     }
-    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) label {
-      background:#f0f3f7;border:1px solid #e3e8ee;border-radius:12px;
-      padding:14px 18px;min-height:62px;display:flex;align-items:center;
-      font-weight:800;transition:.15s;
+    .st-key-modo_pesquisa_premium [data-testid="stRadio"] > label p {
+      color:#102d50 !important;font-weight:800 !important;font-size:1rem !important;
     }
-    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) label:has(input:checked) {
-      background:linear-gradient(100deg,#082448,#146093);border-color:#b9904b;
-      box-shadow:0 5px 14px rgba(5,42,78,.18);
+    .st-key-modo_pesquisa_premium [role="radiogroup"] {
+      display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+      gap:14px !important;width:100% !important;
     }
-    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) label:has(input:checked) p {
+    .st-key-modo_pesquisa_premium [role="radiogroup"] > label {
+      display:flex !important;align-items:center !important;justify-content:flex-start !important;
+      min-height:70px !important;padding:15px 19px !important;
+      background:#f0f4f8 !important;border:2px solid #d7e1eb !important;
+      border-radius:12px !important;cursor:pointer !important;
+    }
+    .st-key-modo_pesquisa_premium [role="radiogroup"] > label p {
+      color:#173657 !important;font-size:1.07rem !important;
+      font-weight:800 !important;line-height:1.35 !important;
+    }
+    .st-key-modo_pesquisa_premium [role="radiogroup"] > label:has(input:checked) {
+      background:linear-gradient(110deg,#062345,#10568c) !important;
+      border-color:#d8ad63 !important;
+      box-shadow:0 5px 15px rgba(4,37,70,.22) !important;
+    }
+    .st-key-modo_pesquisa_premium [role="radiogroup"] > label:has(input:checked) p {
       color:#fff !important;
     }
-    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) > label {display:none;}
-    div[data-testid="stRadio"]:has(input[value="Pesquisar por período"]) label p {font-weight:800;}
+    .st-key-modo_pesquisa_premium [role="radiogroup"] > label:has(input:checked) [data-testid="stMarkdownContainer"] * {
+      color:#fff !important;
+    }
+    @media(max-width:620px) {
+      .st-key-modo_pesquisa_premium [role="radiogroup"] {grid-template-columns:1fr !important;}
+      .st-key-modo_pesquisa_premium [role="radiogroup"] > label {min-height:56px !important;}
+    }
     div[data-testid="stVerticalBlockBorderWrapper"] > div {
       border:0 !important;background:transparent !important;box-shadow:none !important;
       padding:5px 0 !important;
@@ -997,10 +1021,11 @@ elif menu == "Consultar cotas":
         '</section>', unsafe_allow_html=True,
     )
 
-    modo_consulta = st.radio(
-        "Tipo de pesquisa", ["Pesquisar por período", "Pesquisar por cotista"],
-        horizontal=True, key="modo_consulta_cotas",
-    )
+    with st.container(key="modo_pesquisa_premium"):
+        modo_consulta = st.radio(
+            "Tipo de pesquisa", ["Pesquisar por período", "Pesquisar por cotista"],
+            horizontal=True, key="modo_consulta_cotas",
+        )
     cotistas_pesquisa = []
     cotista_escolhido = None
     if modo_consulta == "Pesquisar por cotista":
