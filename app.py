@@ -938,17 +938,24 @@ def converter_data_reserva(valor):
 def situacao_cota(item, registros):
     entrada = datetime.strptime(item["entrada"], "%d/%m/%Y").date()
     saida = datetime.strptime(item["saida"], "%d/%m/%Y").date()
+    unidade_id = str(item.get("cota_cotista_id") or "")
+    if not unidade_id:
+        return "Indisponível (unidade não identificada)"
     for registro in registros:
-        cota_reserva = str(registro.get("cota") or "").strip().casefold()
+        if str(registro.get("resort") or "").strip().casefold() != str(item["resort"]).strip().casefold():
+            continue
+        cota_registro = str(registro.get("cota") or "").strip().casefold()
         cota_completa = str(item["cota"]).strip().casefold()
-        cota_simples = cota_completa.rsplit(' | cota ', 1)[-1]
-        if (str(registro.get("resort") or "").strip().casefold() != str(item["resort"]).strip().casefold()
-                or cota_reserva not in (cota_completa, cota_simples)):
+        cota_simples = cota_completa.rsplit(" | cota ", 1)[-1]
+        if cota_registro not in (cota_completa, cota_simples):
+            continue
+        # Registros antigos sem unidade: não liberar datas possivelmente ocupadas.
+        registro_id = str(registro.get("cota_cotista_id") or "")
+        if registro_id and registro_id != unidade_id:
             continue
         inicio = converter_data_reserva(registro.get("checkin"))
         fim = converter_data_reserva(registro.get("checkout"))
         if not inicio or not fim:
-            # Registro sem datas confiaveis: nao presumir disponibilidade.
             return "Indisponível (verificar cadastro)"
         if entrada >= fim or saida <= inicio:
             continue
@@ -1261,117 +1268,85 @@ elif menu == "Consultar cotas":
                     cotistas_consulta = []
                     st.warning("Não foi possível consultar os responsáveis das cotas agora.")
 
-                responsaveis_por_cota = {}
+                unidades_por_cota = {}
                 for cotista in cotistas_consulta:
                     for vinculo in cotista.get("vinculos") or []:
                         chave = chave_vinculo(vinculo.get("resort"), vinculo.get("local"), vinculo.get("cota"))
-                        nome = str(cotista.get("nome") or "").strip()
-                        if nome:
-                            responsaveis_por_cota.setdefault(chave, set()).add(nome)
+                        if vinculo.get("id"):
+                            unidades_por_cota.setdefault(chave, []).append({
+                                "id": str(vinculo["id"]), "nome": str(cotista.get("nome") or "Sem nome"),
+                                "apartamento": str(vinculo.get("apartamento") or "").strip(),
+                                "local": str(vinculo.get("local") or ""),
+                            })
 
                 for indice, item in enumerate(resultados):
-                    situacao = situacao_cota(item, reservas_atuais) if consulta_reservas_ok else "Verificação indisponível"
-                    disponivel = situacao == "Disponível" and consulta_reservas_ok
-                    if not disponivel and st.session_state.get("cota_selecionada") == item:
-                        st.session_state.pop("cota_selecionada", None)
-                        st.session_state.pop("link_gerado", None)
-                        st.session_state.pop("link_gerado_para", None)
+                    numero_cota = str(item["cota"]).rsplit(" | Cota ", 1)[-1]
+                    chave_item = chave_vinculo(item["resort"], item["aba"], numero_cota)
+                    unidades = unidades_por_cota.get(chave_item, [])
+                    # Nunca atribuir uma reserva a um apartamento não identificado.
+                    unidades = [u for u in unidades if u["apartamento"]]
                     with st.container(border=True):
-                        topo_nome, topo_status, topo_botao = st.columns(
-                            [3, 1.7, 2.2], vertical_alignment="center"
-                        )
-                        with topo_nome:
-                            numero_cota = str(item["cota"]).rsplit(" | Cota ", 1)[-1].strip().casefold()
-                            chave_item = chave_vinculo(item["resort"], item["aba"], numero_cota)
-                            nomes_responsaveis = responsaveis_por_cota.get(chave_item, set())
-                            # Se houver cadastros conflitantes, não atribuir dono errado.
-                            responsavel_html = (
-                                f"<div style='font-size:.85rem;color:#385774;margin-top:5px;'>"
-                                f"👤 <strong>Responsável:</strong> {html.escape(next(iter(nomes_responsaveis)))}</div>"
-                                if len(nomes_responsaveis) == 1 else ""
-                            )
-                            st.markdown(
-                                f"<div class='result-title'>{icone('building', 19)} {html.escape(str(item['resort']))}</div>"
-                                f"<p class='result-subtitle'>Cota {html.escape(str(item['cota']))}</p>"
-                                f"{responsavel_html}",
-                                unsafe_allow_html=True,
-                            )
-                        with topo_status:
-                            if situacao == "Disponível":
-                                st.success("Disponível (consulta)")
-                            elif situacao == "Reservada":
-                                st.error("Reservada")
-                            else:
-                                st.warning(f"{situacao}")
-                        with topo_botao:
-                            if st.button(
-                                "Reservar para cliente" if disponivel else "Indisponível para reserva",
-                                 icon=":material/event_available:" if disponivel else ":material/lock:",
-                                key=f"reservar_{indice}_{item['resort']}_{item['cota']}_{item['entrada']}_{item['saida']}",
-                                use_container_width=True,
-                                disabled=not disponivel,
-                            ):
-                                st.session_state["cota_selecionada"] = item
-                                st.session_state.pop("link_gerado", None)
-                                st.session_state.pop("link_gerado_para", None)
-
                         st.markdown(
-                            f"""
-                            <div class="result-details">
-                                <div class="detail-box">
-                                    <div class="detail-label">CHECK-IN SOLICITADO</div>
-                                    <div class="detail-value">{html.escape(str(item['entrada']))}</div>
-                                </div>
-                                <div class="detail-box">
-                                    <div class="detail-label">CHECK-OUT SOLICITADO</div>
-                                    <div class="detail-value">{html.escape(str(item['saida']))}</div>
-                                </div>
-                                <div class="detail-box">
-                                    <div class="detail-label">BLOCO / PAVIMENTO</div>
-                                    <div class="detail-value">{html.escape(str(item['aba']))}</div>
-                                </div>
-                            </div>
-                            <p style="color:#667789;font-size:.84rem;margin:14px 0 0 0;">
-                                <strong>Período completo do cronograma:</strong>
-                                {html.escape(str(item['cronograma_entrada']))} a {html.escape(str(item['cronograma_saida']))}<br>
-                                {html.escape(str(item['detalhes']))}
-                            </p>
-                            """,
+                            f"<div class='result-title'>{icone('building', 19)} {html.escape(str(item['resort']))}</div>"
+                            f"<p class='result-subtitle'>Cota {html.escape(str(item['cota']))}</p>",
                             unsafe_allow_html=True,
                         )
-
-                        if st.session_state.get("cota_selecionada") == item:
-                            st.caption("Informe os valores por diária. O cliente verá apenas o total do cotista. O link expira em 48 horas.")
-                            qtd_diarias = dias_reserva(item)
-                            col_val_cotista, col_val_adm = st.columns(2)
-                            with col_val_cotista:
-                                diaria_cotista = st.number_input("Diária do cotista (R$)", min_value=0.01, value=350.0, step=10.0, format="%.2f", key=f"cotista_{indice}_{item['resort']}_{item['cota']}")
-                            with col_val_adm:
-                                diaria_adm = st.number_input("Diária do ADM (R$)", min_value=0.0, value=100.0, step=10.0, format="%.2f", key=f"adm_{indice}_{item['resort']}_{item['cota']}")
-                            st.info(f"{qtd_diarias} diárias · Total cotista: {moeda_br(Decimal(str(diaria_cotista)) * qtd_diarias)} · Total ADM: {moeda_br(Decimal(str(diaria_adm)) * qtd_diarias)}")
-                            if st.button("Gerar link de reserva", key=f"link_{indice}", type="primary"):
-                                try:
-                                    reservas_revalidadas = chamar_supabase("listar_reservas_admin", {})
-                                    if isinstance(reservas_revalidadas, str):
-                                        reservas_revalidadas = json.loads(reservas_revalidadas)
-                                    if not isinstance(reservas_revalidadas, list):
-                                        raise RuntimeError("Não foi possível validar a disponibilidade.")
-                                    if situacao_cota(item, reservas_revalidadas) != "Disponível":
-                                        raise RuntimeError("Esta cota já possui uma reserva ou link ativo. Atualize a consulta.")
-                                    token = chamar_supabase("criar_link_reserva", {
-                                        "p_resort": item["resort"], "p_cota": item["cota"],
-                                        "p_checkin": datetime.strptime(item["entrada"], "%d/%m/%Y").date().isoformat(),
-                                        "p_checkout": datetime.strptime(item["saida"], "%d/%m/%Y").date().isoformat(),
-                                        "p_diaria_cotista": round(diaria_cotista, 2),
-                                        "p_diaria_adm": round(diaria_adm, 2),
-                                    })
-                                    st.session_state["link_gerado"] = f"{config_segura('APP_URL').rstrip('/')}?{urlencode({'reserva': token})}"
-                                    st.session_state["link_gerado_para"] = item
-                                except RuntimeError as erro:
-                                    st.error(f"Não foi possível gerar o link: {erro}")
-                            if st.session_state.get("link_gerado") and st.session_state.get("link_gerado_para") == item:
-                                st.code(st.session_state["link_gerado"], language=None)
-                                st.caption("Copie e envie ao cliente pelo WhatsApp.")
+                        if not unidades:
+                            st.warning("Sem apartamento cadastrado para esta cota. Cadastre a unidade antes de reservar.")
+                        else:
+                            st.caption("Disponibilidade independente por apartamento:")
+                        for unidade in unidades:
+                            unidade_item = {**item, "cota_cotista_id": unidade["id"], "apartamento": unidade["apartamento"]}
+                            situacao = situacao_cota(unidade_item, reservas_atuais) if consulta_reservas_ok else "Verificação indisponível"
+                            disponivel = situacao == "Disponível" and consulta_reservas_ok
+                            titulo_unidade = f"{unidade['nome']} · Apartamento {unidade['apartamento']} · {unidade['local']}"
+                            st.markdown(f"**{html.escape(titulo_unidade)}**")
+                            esquerda, direita = st.columns([2, 2], vertical_alignment="center")
+                            with esquerda:
+                                if disponivel:
+                                    st.success("Disponível")
+                                elif situacao == "Reservada":
+                                    st.error("Reservada")
+                                else:
+                                    st.warning(situacao)
+                            with direita:
+                                if st.button("Reservar este apartamento", key=f"reservar_unidade_{indice}_{unidade['id']}", disabled=not disponivel, use_container_width=True):
+                                    st.session_state["unidade_selecionada"] = (indice, unidade["id"])
+                                    st.session_state.pop("link_gerado", None)
+                                    st.session_state.pop("link_gerado_para", None)
+                            if st.session_state.get("unidade_selecionada") == (indice, unidade["id"]):
+                                st.caption(f"Reserva para {titulo_unidade}. O cliente verá apenas o valor total do cotista.")
+                                qtd_diarias = dias_reserva(item)
+                                col_cotista, col_adm = st.columns(2)
+                                with col_cotista:
+                                    diaria_cotista = st.number_input("Diária do cotista (R$)", min_value=0.01, value=350.0, step=10.0, format="%.2f", key=f"cotista_unidade_{indice}_{unidade['id']}")
+                                with col_adm:
+                                    diaria_adm = st.number_input("Diária do ADM (R$)", min_value=0.0, value=100.0, step=10.0, format="%.2f", key=f"adm_unidade_{indice}_{unidade['id']}")
+                                st.info(f"{qtd_diarias} diárias · Total cotista: {moeda_br(Decimal(str(diaria_cotista)) * qtd_diarias)} · Total ADM: {moeda_br(Decimal(str(diaria_adm)) * qtd_diarias)}")
+                                if st.button("Gerar link de reserva", key=f"link_unidade_{indice}_{unidade['id']}", type="primary"):
+                                    try:
+                                        atualizadas = chamar_supabase("listar_reservas_admin", {})
+                                        if isinstance(atualizadas, str):
+                                            atualizadas = json.loads(atualizadas)
+                                        if not isinstance(atualizadas, list) or situacao_cota(unidade_item, atualizadas) != "Disponível":
+                                            raise RuntimeError("Apartamento indisponível ou consulta de reservas inválida.")
+                                        token = chamar_supabase("criar_link_reserva_unidade", {
+                                            "p_resort": item["resort"], "p_cota": item["cota"],
+                                            "p_cota_cotista_id": unidade["id"],
+                                            "p_checkin": datetime.strptime(item["entrada"], "%d/%m/%Y").date().isoformat(),
+                                            "p_checkout": datetime.strptime(item["saida"], "%d/%m/%Y").date().isoformat(),
+                                            "p_diaria_cotista": round(diaria_cotista, 2),
+                                            "p_diaria_adm": round(diaria_adm, 2),
+                                        })
+                                        st.session_state["link_gerado"] = f"{config_segura('APP_URL').rstrip('/')}?{urlencode({'reserva': token})}"
+                                        st.session_state["link_gerado_para"] = (indice, unidade["id"])
+                                    except RuntimeError as erro:
+                                        st.error(f"Não foi possível gerar o link: {erro}")
+                                if st.session_state.get("link_gerado") and st.session_state.get("link_gerado_para") == (indice, unidade["id"]):
+                                    st.code(st.session_state["link_gerado"], language=None)
+                                    st.caption("Copie e envie ao cliente pelo WhatsApp.")
+                            st.divider()
+                        st.caption(f"Período: {item['entrada']} a {item['saida']} · Cronograma: {item['cronograma_entrada']} a {item['cronograma_saida']}")
             else:
                 st.markdown(
                     """
