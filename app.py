@@ -771,6 +771,29 @@ st.markdown(
       font-weight:800 !important;text-transform:uppercase;
       box-shadow:0 7px 20px rgba(8,52,89,.18) !important;
     }
+    /* Legibilidade do texto e icone em botoes primarios, inclusive busca por cotista */
+    [data-testid="stMain"] div.stButton > button[kind="primary"],
+    [data-testid="stMain"] div.stButton > button[kind="primary"] p,
+    [data-testid="stMain"] div.stButton > button[kind="primary"] span,
+    [data-testid="stMain"] div.stButton > button[kind="primary"] svg {
+      color:#ffffff !important;
+      fill:none;
+      font-weight:800 !important;
+      opacity:1 !important;
+    }
+    [data-testid="stMain"] div.stButton > button[kind="primary"] p {
+      font-size:1rem !important;
+      letter-spacing:.035em !important;
+      text-shadow:0 1px 2px rgba(0,0,0,.25) !important;
+    }
+    [data-testid="stMain"] div.stButton > button[kind="primary"] svg {
+      stroke:#ffffff !important;
+    }
+    [data-testid="stMain"] div.stButton > button[kind="primary"]:disabled {
+      background:#6d849c !important;
+      border-color:#6d849c !important;
+      box-shadow:none !important;
+    }
     .resort-benefits {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:24px 0;}
     .resort-benefit {display:flex;gap:12px;align-items:center;padding:17px 13px;background:rgba(255,255,255,.96);
       border:1px solid #edf0f2;border-radius:16px;box-shadow:0 8px 24px rgba(19,41,60,.07);}
