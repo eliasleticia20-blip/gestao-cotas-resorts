@@ -174,48 +174,49 @@ def ler_pagina(page, resort, numero_pagina):
 
 
 def ler_aqualand(pagina, numero_pagina):
-    """Lê as 3 tabelas paralelas do Aqualand: cotas A-Z, datas e ano por coluna."""
+    """Extrai as 26 cotas A-Z das três tabelas anuais do Aqualand.
+
+    Cada letra ocupa duas linhas (dois períodos por ano). A posição da
+    letra é centralizada entre essas linhas; por isso usamos proximidade
+    vertical em vez de exigir que a letra esteja na mesma linha da data.
+    """
     meses = {"jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
              "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12}
     palavras = pagina.get_text("words")
     registros = []
     problemas = []
-    # A tabela usa três blocos independentes, cada um com sua coluna Cota e Ano.
-    for inicio_x, fim_x in ((95, 231), (231, 363), (363, 500)):
-        letras = [w for w in palavras if inicio_x <= w[0] < inicio_x + 18
+    for inicio, fim in ((100, 232), (232, 364), (364, 500)):
+        letras = [w for w in palavras if inicio <= w[0] < inicio + 16
                   and re.fullmatch(r"[A-Z]", w[4]) and w[1] > 80]
-        anos = [w for w in palavras if inicio_x + 62 <= w[0] < inicio_x + 86
-                and re.fullmatch(r"20\d{2}", w[4])]
-        datas = [w for w in palavras if inicio_x + 18 <= w[0] < inicio_x + 58
-                 and re.fullmatch(r"\d{2}/[a-z]{3}", w[4].lower())]
+        anos = [w for w in palavras if inicio + 67 <= w[0] < inicio + 78
+                and re.fullmatch(r"20\d{2}", w[4]) and w[1] > 80]
+        datas = [w for w in palavras if inicio + 16 <= w[0] < inicio + 54
+                 and re.fullmatch(r"\d{2}/[a-z]{3}", w[4].lower()) and w[1] > 80]
         for ano in anos:
-            y = (ano[1] + ano[3])/2
-            letra = min(letras, key=lambda w: abs((w[1]+w[3])/2-y), default=None)
-            if letra is None or abs((letra[1]+letra[3])/2-y) > 10:
+            y = (ano[1] + ano[3]) / 2
+            letra = min(letras, key=lambda w: abs((w[1] + w[3]) / 2 - y), default=None)
+            if letra is None or abs((letra[1] + letra[3]) / 2 - y) > 10:
                 continue
-            linha_datas = [w for w in datas if abs((w[1]+w[3])/2-y) < 4.5]
-            datas_ano = sorted((w for w in linha_datas if ano[0]-60 < w[0] < ano[0]-16), key=lambda w:w[0])
-            entrada = datas_ano[0][4] if len(datas_ano) >= 2 else None
-            saida = datas_ano[1][4] if len(datas_ano) >= 2 else None
-            if not entrada or not saida:
-                problemas.append(f"Aqualand: página {numero_pagina}, cota {letra[4]} sem datas completas")
+            linha_datas = sorted((w for w in datas if abs((w[1] + w[3]) / 2 - y) < 4.5), key=lambda w: w[0])
+            if len(linha_datas) != 2:
+                problemas.append(f"Aqualand: página {numero_pagina}, cota {letra[4]}, datas incompletas")
                 continue
             try:
                 def converter(valor, ano_base):
-                    dia, mes = valor.lower().split('/')
+                    dia, mes = valor.lower().split("/")
                     return datetime(int(ano_base), meses[mes], int(dia))
-                di = converter(entrada, ano[4])
-                df = converter(saida, ano[4])
+                di = converter(linha_datas[0][4], ano[4])
+                df = converter(linha_datas[1][4], ano[4])
                 if df <= di:
-                    df = converter(saida, int(ano[4]) + 1)
-                if not 0 < (df-di).days <= 35:
-                    raise ValueError('intervalo fora do esperado')
+                    df = converter(linha_datas[1][4], int(ano[4]) + 1)
+                if not 0 < (df - di).days <= 35:
+                    raise ValueError("intervalo fora do esperado")
             except (ValueError, KeyError) as exc:
                 problemas.append(f"Aqualand: página {numero_pagina}, cota {letra[4]}, datas inválidas: {exc}")
                 continue
-            registros.append({'Cota': letra[4], 'Check-in': di, 'Check-out': df,
-                              'Período': '', 'Local': 'Cronograma Aqualand',
-                              'Página PDF': numero_pagina})
+            registros.append({"Cota": letra[4], "Check-in": di, "Check-out": df,
+                              "Período": "", "Local": "Cronograma Aqualand",
+                              "Página PDF": numero_pagina})
     return registros, problemas
 
 
@@ -233,7 +234,9 @@ def carregar_pdfs(diretorio='.'):
             with fitz.open(caminho) as pdf:
                 for indice,pagina in enumerate(pdf):
                     # Páginas de capa e divisórias não possuem tabelas.
-                    if 'CHECK-IN' not in pagina.get_text():
+                    if resort != 'Aqualand' and 'CHECK-IN' not in pagina.get_text():
+                        continue
+                    if resort == 'Aqualand' and not re.search(r'\bCota\b', pagina.get_text(), re.I):
                         continue
                     if resort == 'Aqualand':
                         linhas, erros = ler_aqualand(pagina, indice+1)
