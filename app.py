@@ -776,6 +776,10 @@ def normalizar_local_cota(local):
             return ("torre", "atalaia")
         if "corvina" in nome:
             return ("torre", "corvina")
+        # Alias específico para o nome usado no cadastro e no cronograma.
+        # Não afeta Atalaia, Corvina ou Maçarico.
+        if nome in ("farol", "farol velho"):
+            return ("torre", "farol")
         return ("torre", nome)
     bloco = re.search(r"\bbloco\s*0*(\d+)\b", texto)
     if bloco:
@@ -998,10 +1002,16 @@ elif menu == "Consultar cotas":
                             })
             st.markdown("---")
             st.markdown('<div class="section-heading">Resultado da consulta</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="section-subtitle">Período solicitado: {data_entrada.strftime("%d/%m/%Y")} a {data_saida.strftime("%d/%m/%Y")}</div>',
-                unsafe_allow_html=True,
-            )
+            if modo_consulta == "Pesquisar por cotista":
+                st.markdown(
+                    f'<div class="section-subtitle">Cotista: {html.escape(str(cotista_escolhido.get("nome") or ""))} · Períodos futuros a partir de {date.today().strftime("%d/%m/%Y")}</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f'<div class="section-subtitle">Período solicitado: {data_entrada.strftime("%d/%m/%Y")} a {data_saida.strftime("%d/%m/%Y")}</div>',
+                    unsafe_allow_html=True,
+                )
 
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -1012,7 +1022,32 @@ elif menu == "Consultar cotas":
                 st.markdown(f'<div class="metric-card"><div class="metric-label">PDFs com dados</div><div class="metric-value">{total_resorts_com_dados}</div></div>', unsafe_allow_html=True)
 
             if modo_consulta == "Pesquisar por cotista" and not resultados:
-                st.warning("Não encontrei períodos futuros nos PDFs que correspondam exatamente ao resort, à torre/bloco e à cota desse cadastro. Confira os vínculos em Cadastros. Não associei cotas de torres diferentes automaticamente.")
+                vinculos_pesquisados = cotista_escolhido.get("vinculos") or []
+                chaves_cotista = {
+                    chave_vinculo(v.get("resort"), v.get("local"), v.get("cota"))
+                    for v in vinculos_pesquisados
+                }
+                historicos = []
+                for resort_pdf, locais_pdf in base_dados.items():
+                    for local_pdf, tabela_pdf in locais_pdf.items():
+                        for _, registro_pdf in tabela_pdf.iterrows():
+                            if chave_vinculo(resort_pdf, local_pdf, registro_pdf["Cota"]) in chaves_cotista:
+                                historicos.append(registro_pdf)
+                if historicos:
+                    ultima_saida = max(r["Check-out"].date() for r in historicos)
+                    st.warning(
+                        "As cotas deste cadastro foram encontradas nos cronogramas, "
+                        "mas não há períodos futuros cadastrados nos PDFs carregados. "
+                        f"A última saída encontrada é {ultima_saida.strftime('%d/%m/%Y')}. "
+                        "É necessário atualizar o cronograma PDF para pesquisar novas datas."
+                    )
+                else:
+                    st.warning(
+                        "Não encontrei nos PDFs uma correspondência entre resort, torre/bloco e cota. "
+                        "Para o Park Resort, Torre Farol e Torre Farol Velho são tratadas como "
+                        "a mesma torre nesta pesquisa. As demais torres continuam separadas. "
+                        "Confira os vínculos em Cadastros e os dados dos PDFs."
+                    )
             if resultados:
                 st.caption("A busca aceita estadias dentro dos períodos dos PDFs. Somente as datas solicitadas serão reservadas; os dias restantes poderão ser reservados separadamente. A ocupação é consultada no Supabase.")
                 try:
