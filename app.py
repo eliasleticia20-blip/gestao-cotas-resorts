@@ -941,6 +941,43 @@ elif menu == "Consultar cotas":
                     st.error("Há páginas com erro de leitura ou PDFs ausentes. Por segurança, a criação de reservas fica bloqueada até corrigir os avisos.")
                     consulta_reservas_ok = False
 
+                # Carregar os vínculos apenas na consulta administrativa.
+                # Uma falha nessa consulta não interfere na verificação de reservas.
+                cotistas_consulta = []
+                try:
+                    cotistas_consulta = chamar_supabase(
+                        "gerenciar_cotistas_admin", {"p_acao": "listar", "p_dados": {}}
+                    )
+                    if not isinstance(cotistas_consulta, list):
+                        raise ValueError("Resposta de cotistas inválida")
+                except (RuntimeError, ValueError, TypeError):
+                    cotistas_consulta = []
+                    st.warning("Não foi possível consultar os responsáveis das cotas agora.")
+
+                def chave_local_cota(local):
+                    # Uniformiza "Bloco 01 - Pav. 01 a 08" e
+                    # "Bloco 01 - 1º ao 8º Pavimento" sem misturar blocos.
+                    valor = str(local or "").casefold()
+                    bloco = re.search(r"\bbloco\s*0*(\d+)\b", valor)
+                    if bloco:
+                        numeros = re.findall(r"\d+", valor[bloco.end():])
+                        if len(numeros) >= 2:
+                            return ("bloco", int(bloco.group(1)), int(numeros[0]), int(numeros[1]))
+                        return ("bloco", int(bloco.group(1)), None, None)
+                    return ("texto", re.sub(r"\s+", " ", valor).strip())
+
+                responsaveis_por_cota = {}
+                for cotista in cotistas_consulta:
+                    for vinculo in cotista.get("vinculos") or []:
+                        chave = (
+                            str(vinculo.get("resort") or "").strip().casefold(),
+                            chave_local_cota(vinculo.get("local")),
+                            str(vinculo.get("cota") or "").strip().casefold(),
+                        )
+                        nome = str(cotista.get("nome") or "").strip()
+                        if nome:
+                            responsaveis_por_cota.setdefault(chave, set()).add(nome)
+
                 for indice, item in enumerate(resultados):
                     situacao = situacao_cota(item, reservas_atuais) if consulta_reservas_ok else "Verificação indisponível"
                     disponivel = situacao == "Disponível" and consulta_reservas_ok
@@ -953,9 +990,23 @@ elif menu == "Consultar cotas":
                             [3, 1.7, 2.2], vertical_alignment="center"
                         )
                         with topo_nome:
+                            numero_cota = str(item["cota"]).rsplit(" | Cota ", 1)[-1].strip().casefold()
+                            chave_item = (
+                                str(item["resort"]).strip().casefold(),
+                                chave_local_cota(item["aba"]),
+                                numero_cota,
+                            )
+                            nomes_responsaveis = responsaveis_por_cota.get(chave_item, set())
+                            # Se houver cadastros conflitantes, não atribuir dono errado.
+                            responsavel_html = (
+                                f"<div style='font-size:.85rem;color:#385774;margin-top:5px;'>"
+                                f"👤 <strong>Responsável:</strong> {html.escape(next(iter(nomes_responsaveis)))}</div>"
+                                if len(nomes_responsaveis) == 1 else ""
+                            )
                             st.markdown(
                                 f"<div class='result-title'>{icone('building', 19)} {html.escape(str(item['resort']))}</div>"
-                                f"<p class='result-subtitle'>Cota {html.escape(str(item['cota']))}</p>",
+                                f"<p class='result-subtitle'>Cota {html.escape(str(item['cota']))}</p>"
+                                f"{responsavel_html}",
                                 unsafe_allow_html=True,
                             )
                         with topo_status:
