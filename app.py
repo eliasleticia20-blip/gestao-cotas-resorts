@@ -1263,7 +1263,7 @@ elif menu == "Cadastros":
     termo = pesquisa.strip().casefold()
     exibidos = [c for c in cotistas if not termo or termo in json.dumps(c, ensure_ascii=False).casefold()]
     opcoes = {f"{c['nome']} · {str(c['id'])[:8]}": c for c in cotistas}
-    aba_lista, aba_novo, aba_editar, aba_vinculo = st.tabs(["Consultar", "Novo cotista", "Editar cotista", "Vincular cota"])
+    aba_lista, aba_novo, aba_editar, aba_vinculo, aba_editar_vinculo = st.tabs(["Consultar", "Novo cotista", "Editar cotista", "Vincular cota", "Editar vínculo"])
 
     with aba_lista:
         if not exibidos:
@@ -1276,6 +1276,7 @@ elif menu == "Cadastros":
                 for v in c.get('vinculos') or []:
                     col_desc, col_del = st.columns([5, 1])
                     col_desc.write(f"{v['resort']} · {v['local']} · Apto {v['apartamento']} · Cota {v['cota']}")
+                    col_desc.caption(f"UH: {v.get('uh') or '—'} · Tipo UH: {v.get('tipo_uh') or '—'} · Contrato: {v.get('contrato') or '—'}")
                     if col_del.button("Desvincular", key=f"desv_{v['id']}"):
                         try:
                             chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "desvincular", "p_dados": {"id": v['id']}})
@@ -1327,14 +1328,48 @@ elif menu == "Cadastros":
                 resort = st.selectbox("Resort *", list(ARQUIVOS_RESORTS.keys()) + ["Aqualand", "Outro / não identificado"])
                 locais = list(base_dados.get(resort, {}).keys())
                 local = st.selectbox("Bloco / torre *", locais + ["Outro / conferir manualmente"]) if locais else st.text_input("Bloco / torre *")
-                apartamento = st.text_input("Apartamento / UH *", placeholder="Ex.: 809 ou 1309-1")
+                apartamento = st.text_input("Apartamento *", placeholder="Ex.: 809")
+                uh = st.text_input("UH (unidade habitacional)", placeholder="Ex.: 901-2")
+                tipo_uh = st.text_input("Tipo de UH", placeholder="Ex.: 1 quarto, 2 quartos")
+                contrato = st.text_input("Contrato", placeholder="Número ou referência, se houver")
                 cota = st.text_input("Número da cota *", placeholder="Ex.: 10")
                 obs = st.text_area("Observações do vínculo", placeholder="Ex.: frente mar, 2 quartos, identificação pendente")
                 vincular = st.form_submit_button("Vincular cota", type="primary")
             if vincular:
                 try:
-                    chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "vincular", "p_dados": {"cotista_id": opcoes[escolha]['id'], "resort": resort, "local": local, "apartamento": apartamento, "cota": cota, "observacoes": obs}})
+                    chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "vincular", "p_dados": {"cotista_id": opcoes[escolha]['id'], "resort": resort, "local": local, "apartamento": apartamento, "uh": uh, "tipo_uh": tipo_uh, "contrato": contrato, "cota": cota, "observacoes": obs}})
                     st.success("Cota vinculada ao responsável!")
+                    st.rerun()
+                except RuntimeError as erro:
+                    st.error(str(erro))
+
+
+    with aba_editar_vinculo:
+        vinculos_disponiveis = [(c, v) for c in cotistas for v in (c.get("vinculos") or [])]
+        if not vinculos_disponiveis:
+            st.info("Vincule uma cota antes de editar seus dados.")
+        else:
+            opcoes_vinculo = {f"{c['nome']} · {v['resort']} · {v['local']} · Apto {v['apartamento']} · Cota {v['cota']} · {v['id'][:8]}": (c, v) for c, v in vinculos_disponiveis}
+            selecionado = st.selectbox("Selecione o vínculo", list(opcoes_vinculo), key="editar_vinculo_sel")
+            _, v = opcoes_vinculo[selecionado]
+            with st.form(f"editar_vinculo_form_{v['id']}"):
+                resort_ed = st.text_input("Resort *", value=v.get("resort") or "")
+                local_ed = st.text_input("Bloco / torre *", value=v.get("local") or "")
+                apartamento_ed = st.text_input("Apartamento *", value=v.get("apartamento") or "")
+                cota_ed = st.text_input("Cota *", value=v.get("cota") or "")
+                uh_ed = st.text_input("UH", value=v.get("uh") or "")
+                tipo_ed = st.text_input("Tipo de UH", value=v.get("tipo_uh") or "")
+                contrato_ed = st.text_input("Contrato", value=v.get("contrato") or "")
+                obs_ed = st.text_area("Observações", value=v.get("observacoes") or "")
+                salvar_vinculo = st.form_submit_button("Salvar alterações do vínculo", type="primary")
+            if salvar_vinculo:
+                try:
+                    chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "editar_vinculo", "p_dados": {
+                        "id": v["id"], "resort": resort_ed, "local": local_ed,
+                        "apartamento": apartamento_ed, "cota": cota_ed,
+                        "uh": uh_ed, "tipo_uh": tipo_ed, "contrato": contrato_ed,
+                        "observacoes": obs_ed}})
+                    st.success("Vínculo atualizado!")
                     st.rerun()
                 except RuntimeError as erro:
                     st.error(str(erro))
