@@ -1279,10 +1279,8 @@ elif menu == "Consultar cotas":
                                 "local": str(vinculo.get("local") or ""),
                             })
 
-                # Índice auxiliar por resort + número da cota. Serve somente para
-                # MOSTRAR todos os responsáveis, mesmo em blocos diferentes.
-                # A disponibilidade continua exigindo correspondência exata com
-                # o bloco/torre do cronograma do PDF.
+                # Todas as unidades da mesma cota numérica podem ser escolhidas.
+                # O período de cada uma é validado no PDF do SEU próprio bloco.
                 unidades_mesmo_numero = {}
                 for chave, lista_unidades in unidades_por_cota.items():
                     resort_chave, _local_chave, cota_chave = chave
@@ -1291,15 +1289,34 @@ elif menu == "Consultar cotas":
                 for indice, item in enumerate(resultados):
                     numero_cota = str(item["cota"]).rsplit(" | Cota ", 1)[-1]
                     chave_item = chave_vinculo(item["resort"], item["aba"], numero_cota)
-                    unidades = unidades_por_cota.get(chave_item, [])
-                    # Nunca atribuir uma reserva a um apartamento não identificado.
-                    unidades = [u for u in unidades if u["apartamento"]]
-                    outras_unidades = [
-                        u for u in unidades_mesmo_numero.get(
-                            (str(item["resort"]).strip().casefold(), normalizar_cota(numero_cota)), []
-                        )
-                        if u.get("apartamento") and u["id"] not in {x["id"] for x in unidades}
-                    ]
+                    unidades = [u for u in unidades_mesmo_numero.get(
+                        (str(item["resort"]).strip().casefold(), normalizar_cota(numero_cota)), []
+                    ) if u.get("apartamento")]
+                    # Remover repetição de vínculos retornados pelo banco.
+                    unidades = list({u["id"]: u for u in unidades}.values())
+                    # Nunca usar o cronograma do Bloco 01 para reservar o Bloco 02.
+                    # Localizar a linha da unidade no PDF correspondente.
+                    unidades_validadas = []
+                    for u in unidades:
+                        chave_unidade = chave_vinculo(item["resort"], u["local"], numero_cota)
+                        periodo_unidade = None
+                        for nome_aba, df_unidade in base_dados.get(item["resort"], {}).items():
+                            if chave_vinculo(item["resort"], nome_aba, numero_cota) != chave_unidade:
+                                continue
+                            for _, linha_unidade in df_unidade.iterrows():
+                                if normalizar_cota(linha_unidade.get("Cota")) != normalizar_cota(numero_cota):
+                                    continue
+                                di = linha_unidade["Check-in"].date()
+                                df = linha_unidade["Check-out"].date()
+                                entrada_pedida = datetime.strptime(item["entrada"], "%d/%m/%Y").date()
+                                saida_pedida = datetime.strptime(item["saida"], "%d/%m/%Y").date()
+                                if di <= entrada_pedida and df >= saida_pedida:
+                                    periodo_unidade = {**item, "cota": f"{nome_aba} | Cota {numero_cota}", "aba": nome_aba,
+                                        "cota_cotista_id": u["id"], "apartamento": u["apartamento"]}
+                                    break
+                            if periodo_unidade:
+                                break
+                        unidades_validadas.append((u, periodo_unidade))
                     with st.container(border=True):
                         st.markdown(
                             f"<div class='result-title'>{icone('building', 19)} {html.escape(str(item['resort']))}</div>"
@@ -1365,11 +1382,11 @@ elif menu == "Consultar cotas":
                                     st.code(st.session_state["link_gerado"], language=None)
                                     st.caption("Copie e envie ao cliente pelo WhatsApp.")
                         else:
-                            st.caption("Disponibilidade independente por apartamento:")
-                        for unidade in unidades:
-                            unidade_item = {**item, "cota_cotista_id": unidade["id"], "apartamento": unidade["apartamento"]}
-                            situacao = situacao_cota(unidade_item, reservas_atuais) if consulta_reservas_ok else "Verificação indisponível"
-                            disponivel = situacao == "Disponível" and consulta_reservas_ok
+                            st.caption("Escolha o cotista/apartamento. Cada unidade tem disponibilidade independente e cronograma próprio.")
+                        for unidade, unidade_item in unidades_validadas:
+                            situacao = (situacao_cota(unidade_item, reservas_atuais) if consulta_reservas_ok
+                                        else "Verificação indisponível") if unidade_item else "Fora do cronograma deste apartamento"
+                            disponivel = bool(unidade_item) and situacao == "Disponível" and consulta_reservas_ok
                             titulo_unidade = f"{unidade['nome']} · Apartamento {unidade['apartamento']} · {unidade['local']}"
                             st.markdown(f"**{html.escape(titulo_unidade)}**")
                             esquerda, direita = st.columns([2, 2], vertical_alignment="center")
@@ -1402,7 +1419,7 @@ elif menu == "Consultar cotas":
                                         if not isinstance(atualizadas, list) or situacao_cota(unidade_item, atualizadas) != "Disponível":
                                             raise RuntimeError("Apartamento indisponível ou consulta de reservas inválida.")
                                         token = chamar_supabase("criar_link_reserva_unidade", {
-                                            "p_resort": item["resort"], "p_cota": item["cota"],
+                                            "p_resort": unidade_item["resort"], "p_cota": unidade_item["cota"],
                                             "p_cota_cotista_id": unidade["id"],
                                             "p_checkin": datetime.strptime(item["entrada"], "%d/%m/%Y").date().isoformat(),
                                             "p_checkout": datetime.strptime(item["saida"], "%d/%m/%Y").date().isoformat(),
@@ -1417,18 +1434,6 @@ elif menu == "Consultar cotas":
                                     st.code(st.session_state["link_gerado"], language=None)
                                     st.caption("Copie e envie ao cliente pelo WhatsApp.")
                             st.divider()
-                        if outras_unidades:
-                            st.markdown("**Outros responsáveis pela mesma cota (outro bloco/torre):**")
-                            for outra in outras_unidades:
-                                st.markdown(
-                                    f"• **{html.escape(outra['nome'])}** · Apartamento "
-                                    f"**{html.escape(outra['apartamento'])}** · {html.escape(outra['local'])}"
-                                )
-                            st.caption(
-                                "Estes apartamentos pertencem à mesma cota numérica, mas a outro bloco/torre. "
-                                "Para reservar um deles, localize seu próprio cronograma no resultado da pesquisa. "
-                                "Não é seguro usar as datas de outro apartamento."
-                            )
                         st.caption(f"Período: {item['entrada']} a {item['saida']} · Cronograma: {item['cronograma_entrada']} a {item['cronograma_saida']}")
             else:
                 st.markdown(
