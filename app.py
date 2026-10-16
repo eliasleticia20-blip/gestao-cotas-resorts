@@ -918,12 +918,9 @@ elif menu == "Consultar cotas":
                     st.error("Há páginas com erro de leitura ou PDFs ausentes. Por segurança, a criação de reservas fica bloqueada até corrigir os avisos.")
                     consulta_reservas_ok = False
 
-                if not config_segura("PDF_RESERVAS_HABILITADAS"):
-                    st.info("Modo de validação: consulta dos PDFs liberada; novas reservas desabilitadas até conferir a compatibilidade do Supabase com a identificação completa da cota.")
-
                 for indice, item in enumerate(resultados):
                     situacao = situacao_cota(item, reservas_atuais) if consulta_reservas_ok else "Verificação indisponível"
-                    disponivel = situacao == "Disponível" and consulta_reservas_ok and bool(config_segura("PDF_RESERVAS_HABILITADAS"))
+                    disponivel = situacao == "Disponível" and consulta_reservas_ok
                     if not disponivel and st.session_state.get("cota_selecionada") == item:
                         st.session_state.pop("cota_selecionada", None)
                         st.session_state.pop("link_gerado", None)
