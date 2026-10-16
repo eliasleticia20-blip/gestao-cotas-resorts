@@ -753,6 +753,50 @@ def situacao_cota(item, registros):
     return "Disponível"
 
 
+# Identificação rigorosa de cotas: resort + torre/bloco + número.
+# Não associar cotas de torres diferentes apenas pelo número.
+def normalizar_cota(valor):
+    texto = str(valor or "").strip()
+    numeros = re.fullmatch(r"0*(\d+)", texto)
+    return str(int(numeros.group(1))) if numeros else texto.casefold()
+
+
+def normalizar_local_cota(local):
+    texto = str(local or "").casefold().strip()
+    texto = re.sub(r"[áàâã]", "a", texto)
+    texto = re.sub(r"[éê]", "e", texto)
+    texto = re.sub(r"[í]", "i", texto)
+    texto = re.sub(r"[óôõ]", "o", texto)
+    texto = re.sub(r"[ú]", "u", texto)
+    torre = re.search(r"\btorre\s+([a-z0-9]+(?:\s+[a-z0-9]+)*)", texto)
+    if torre:
+        nome = re.sub(r"\s+", " ", torre.group(1)).strip()
+        # Atalaia e Torre 2 (Atalaia) são equivalentes somente quando explícitos.
+        if "atalaia" in nome:
+            return ("torre", "atalaia")
+        if "corvina" in nome:
+            return ("torre", "corvina")
+        return ("torre", nome)
+    bloco = re.search(r"\bbloco\s*0*(\d+)\b", texto)
+    if bloco:
+        numeros = re.findall(r"\d+", texto[bloco.end():])
+        return ("bloco", int(bloco.group(1)), *(int(n) for n in numeros[:2])) if len(numeros) >= 2 else ("bloco", int(bloco.group(1)))
+    return ("outro", re.sub(r"\s+", " ", texto))
+
+
+def chave_vinculo(resort, local, cota):
+    return (str(resort or "").strip().casefold(), normalizar_local_cota(local), normalizar_cota(cota))
+
+
+def consultar_cotistas_admin():
+    dados = chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "listar", "p_dados": {}})
+    if isinstance(dados, str):
+        dados = json.loads(dados)
+    if not isinstance(dados, list):
+        raise RuntimeError("O Supabase não retornou a lista de cotistas.")
+    return dados
+
+
 # ------------------------------------------------------------
 # PAINEL INICIAL - dados reais dos PDFs e do Supabase
 # ------------------------------------------------------------
@@ -859,31 +903,65 @@ elif menu == "Consultar cotas":
         unsafe_allow_html=True,
     )
 
-    with st.container(border=True):
-        col_resort, col_andar = st.columns([1.4, 1])
-        with col_resort:
-            opcoes_resorts = ["Todos os resorts"] + list(ARQUIVOS_RESORTS.keys())
-            resort_selecionado = st.selectbox("Resort", opcoes_resorts)
-        with col_andar:
-            andar_pref = st.selectbox(
-                "Preferência de andar",
-                ["Qualquer andar", "Andar alto", "Andar médio", "Andar baixo"],
+    modo_consulta = st.radio(
+        "Tipo de pesquisa", ["Pesquisar por período", "Pesquisar por cotista"],
+        horizontal=True, key="modo_consulta_cotas",
+    )
+    cotistas_pesquisa = []
+    cotista_escolhido = None
+    if modo_consulta == "Pesquisar por cotista":
+        try:
+            cotistas_pesquisa = consultar_cotistas_admin()
+        except (RuntimeError, ValueError, TypeError) as erro:
+            st.error(f"Não foi possível carregar os cotistas: {erro}")
+        cotistas_com_vinculos = sorted(
+            (c for c in cotistas_pesquisa if c.get("vinculos")),
+            key=lambda c: str(c.get("nome") or "").casefold(),
+        )
+        if cotistas_com_vinculos:
+            indices = list(range(len(cotistas_com_vinculos)))
+            indice_cotista = st.selectbox(
+                "Nome do cotista", indices,
+                format_func=lambda i: str(cotistas_com_vinculos[i].get("nome") or "Sem nome"),
+                key="indice_cotista_consulta",
             )
-            st.caption("A preferência de andar é informativa; confira o pavimento nos resultados.")
-
-        col_in, col_out = st.columns(2)
-        with col_in:
-            data_entrada = st.date_input("Check-in", value=date.today(), format="DD/MM/YYYY")
-        with col_out:
-            data_saida = st.date_input("Check-out", value=date.today(), format="DD/MM/YYYY")
-
-        buscar = st.button("Buscar cotas no período", icon=":material/search:", type="primary", use_container_width=True)
+            cotista_escolhido = cotistas_com_vinculos[indice_cotista]
+            st.caption("Serão exibidos os períodos futuros das cotas vinculadas a essa pessoa, conforme os PDFs.")
+        else:
+            st.info("Nenhum cotista com cotas vinculadas foi encontrado.")
+        buscar = st.button("Buscar datas do cotista", icon=":material/search:", type="primary", use_container_width=True, disabled=cotista_escolhido is None)
+        resort_selecionado = "Todos os resorts"
+        data_entrada = date.today()
+        data_saida = date.today()
+    else:
+        with st.container(border=True):
+            col_resort, col_andar = st.columns([1.4, 1])
+            with col_resort:
+                opcoes_resorts = ["Todos os resorts"] + list(ARQUIVOS_RESORTS.keys())
+                resort_selecionado = st.selectbox("Resort", opcoes_resorts)
+            with col_andar:
+                andar_pref = st.selectbox(
+                    "Preferência de andar",
+                    ["Qualquer andar", "Andar alto", "Andar médio", "Andar baixo"],
+                )
+                st.caption("A preferência de andar é informativa; confira o pavimento nos resultados.")
+            col_in, col_out = st.columns(2)
+            with col_in:
+                data_entrada = st.date_input("Check-in", value=date.today(), format="DD/MM/YYYY")
+            with col_out:
+                data_saida = st.date_input("Check-out", value=date.today(), format="DD/MM/YYYY")
+            buscar = st.button("Buscar cotas no período", icon=":material/search:", type="primary", use_container_width=True)
 
     if buscar:
         st.session_state["busca_ativa"] = True
+        st.session_state["busca_modo_executado"] = modo_consulta
+        st.session_state["busca_cotista_executado"] = str(cotista_escolhido.get("id")) if cotista_escolhido else None
 
-    if st.session_state.get("busca_ativa", False):
-        if data_saida <= data_entrada:
+    busca_compativel = (st.session_state.get("busca_modo_executado") == modo_consulta and
+        (modo_consulta != "Pesquisar por cotista" or
+         st.session_state.get("busca_cotista_executado") == (str(cotista_escolhido.get("id")) if cotista_escolhido else None)))
+    if st.session_state.get("busca_ativa", False) and busca_compativel:
+        if modo_consulta == "Pesquisar por período" and data_saida <= data_entrada:
             st.error("A data de check-out precisa ser posterior à data de check-in.")
         else:
             resorts_alvo = list(ARQUIVOS_RESORTS.keys()) if resort_selecionado == "Todos os resorts" else [resort_selecionado]
@@ -895,15 +973,25 @@ elif menu == "Consultar cotas":
                         for _, linha in df_original.iterrows():
                             inicio = linha['Check-in'].date()
                             fim = linha['Check-out'].date()
-                            if inicio > data_entrada or fim < data_saida:
-                                continue
+                            if modo_consulta == "Pesquisar por cotista":
+                                if fim <= date.today():
+                                    continue
+                                chave_pdf = chave_vinculo(nome_resort, nome_aba, linha['Cota'])
+                                vinculos_cotista = cotista_escolhido.get("vinculos") or []
+                                if not any(chave_vinculo(v.get("resort"), v.get("local"), v.get("cota")) == chave_pdf for v in vinculos_cotista):
+                                    continue
+                                entrada_item, saida_item = max(inicio, date.today()), fim
+                            else:
+                                if inicio > data_entrada or fim < data_saida:
+                                    continue
+                                entrada_item, saida_item = data_entrada, data_saida
                             cota_id = str(linha['Identificação da cota'])
                             resultados.append({
                                 'resort': nome_resort,
                                 'cota': cota_id,
                                 'aba': nome_aba,
-                                'entrada': data_entrada.strftime('%d/%m/%Y'),
-                                'saida': data_saida.strftime('%d/%m/%Y'),
+                                'entrada': entrada_item.strftime('%d/%m/%Y'),
+                                'saida': saida_item.strftime('%d/%m/%Y'),
                                 'cronograma_entrada': inicio.strftime('%d/%m/%Y'),
                                 'cronograma_saida': fim.strftime('%d/%m/%Y'),
                                 'detalhes': f"Cota {linha['Cota']} • {nome_aba} • {linha['Período'] or 'Período comum'} • Página {linha['Página PDF']} do PDF",
@@ -923,6 +1011,8 @@ elif menu == "Consultar cotas":
             with c3:
                 st.markdown(f'<div class="metric-card"><div class="metric-label">PDFs com dados</div><div class="metric-value">{total_resorts_com_dados}</div></div>', unsafe_allow_html=True)
 
+            if modo_consulta == "Pesquisar por cotista" and not resultados:
+                st.warning("Não encontrei períodos futuros nos PDFs que correspondam exatamente ao resort, à torre/bloco e à cota desse cadastro. Confira os vínculos em Cadastros. Não associei cotas de torres diferentes automaticamente.")
             if resultados:
                 st.caption("A busca aceita estadias dentro dos períodos dos PDFs. Somente as datas solicitadas serão reservadas; os dias restantes poderão ser reservados separadamente. A ocupação é consultada no Supabase.")
                 try:
@@ -945,35 +1035,17 @@ elif menu == "Consultar cotas":
                 # Uma falha nessa consulta não interfere na verificação de reservas.
                 cotistas_consulta = []
                 try:
-                    cotistas_consulta = chamar_supabase(
-                        "gerenciar_cotistas_admin", {"p_acao": "listar", "p_dados": {}}
-                    )
+                    cotistas_consulta = cotistas_pesquisa if modo_consulta == "Pesquisar por cotista" else consultar_cotistas_admin()
                     if not isinstance(cotistas_consulta, list):
                         raise ValueError("Resposta de cotistas inválida")
                 except (RuntimeError, ValueError, TypeError):
                     cotistas_consulta = []
                     st.warning("Não foi possível consultar os responsáveis das cotas agora.")
 
-                def chave_local_cota(local):
-                    # Uniformiza "Bloco 01 - Pav. 01 a 08" e
-                    # "Bloco 01 - 1º ao 8º Pavimento" sem misturar blocos.
-                    valor = str(local or "").casefold()
-                    bloco = re.search(r"\bbloco\s*0*(\d+)\b", valor)
-                    if bloco:
-                        numeros = re.findall(r"\d+", valor[bloco.end():])
-                        if len(numeros) >= 2:
-                            return ("bloco", int(bloco.group(1)), int(numeros[0]), int(numeros[1]))
-                        return ("bloco", int(bloco.group(1)), None, None)
-                    return ("texto", re.sub(r"\s+", " ", valor).strip())
-
                 responsaveis_por_cota = {}
                 for cotista in cotistas_consulta:
                     for vinculo in cotista.get("vinculos") or []:
-                        chave = (
-                            str(vinculo.get("resort") or "").strip().casefold(),
-                            chave_local_cota(vinculo.get("local")),
-                            str(vinculo.get("cota") or "").strip().casefold(),
-                        )
+                        chave = chave_vinculo(vinculo.get("resort"), vinculo.get("local"), vinculo.get("cota"))
                         nome = str(cotista.get("nome") or "").strip()
                         if nome:
                             responsaveis_por_cota.setdefault(chave, set()).add(nome)
@@ -991,11 +1063,7 @@ elif menu == "Consultar cotas":
                         )
                         with topo_nome:
                             numero_cota = str(item["cota"]).rsplit(" | Cota ", 1)[-1].strip().casefold()
-                            chave_item = (
-                                str(item["resort"]).strip().casefold(),
-                                chave_local_cota(item["aba"]),
-                                numero_cota,
-                            )
+                            chave_item = chave_vinculo(item["resort"], item["aba"], numero_cota)
                             nomes_responsaveis = responsaveis_por_cota.get(chave_item, set())
                             # Se houver cadastros conflitantes, não atribuir dono errado.
                             responsavel_html = (
