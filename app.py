@@ -1279,12 +1279,27 @@ elif menu == "Consultar cotas":
                                 "local": str(vinculo.get("local") or ""),
                             })
 
+                # Índice auxiliar por resort + número da cota. Serve somente para
+                # MOSTRAR todos os responsáveis, mesmo em blocos diferentes.
+                # A disponibilidade continua exigindo correspondência exata com
+                # o bloco/torre do cronograma do PDF.
+                unidades_mesmo_numero = {}
+                for chave, lista_unidades in unidades_por_cota.items():
+                    resort_chave, _local_chave, cota_chave = chave
+                    unidades_mesmo_numero.setdefault((resort_chave, cota_chave), []).extend(lista_unidades)
+
                 for indice, item in enumerate(resultados):
                     numero_cota = str(item["cota"]).rsplit(" | Cota ", 1)[-1]
                     chave_item = chave_vinculo(item["resort"], item["aba"], numero_cota)
                     unidades = unidades_por_cota.get(chave_item, [])
                     # Nunca atribuir uma reserva a um apartamento não identificado.
                     unidades = [u for u in unidades if u["apartamento"]]
+                    outras_unidades = [
+                        u for u in unidades_mesmo_numero.get(
+                            (str(item["resort"]).strip().casefold(), normalizar_cota(numero_cota)), []
+                        )
+                        if u.get("apartamento") and u["id"] not in {x["id"] for x in unidades}
+                    ]
                     with st.container(border=True):
                         st.markdown(
                             f"<div class='result-title'>{icone('building', 19)} {html.escape(str(item['resort']))}</div>"
@@ -1402,6 +1417,18 @@ elif menu == "Consultar cotas":
                                     st.code(st.session_state["link_gerado"], language=None)
                                     st.caption("Copie e envie ao cliente pelo WhatsApp.")
                             st.divider()
+                        if outras_unidades:
+                            st.markdown("**Outros responsáveis pela mesma cota (outro bloco/torre):**")
+                            for outra in outras_unidades:
+                                st.markdown(
+                                    f"• **{html.escape(outra['nome'])}** · Apartamento "
+                                    f"**{html.escape(outra['apartamento'])}** · {html.escape(outra['local'])}"
+                                )
+                            st.caption(
+                                "Estes apartamentos pertencem à mesma cota numérica, mas a outro bloco/torre. "
+                                "Para reservar um deles, localize seu próprio cronograma no resultado da pesquisa. "
+                                "Não é seguro usar as datas de outro apartamento."
+                            )
                         st.caption(f"Período: {item['entrada']} a {item['saida']} · Cronograma: {item['cronograma_entrada']} a {item['cronograma_saida']}")
             else:
                 st.markdown(
