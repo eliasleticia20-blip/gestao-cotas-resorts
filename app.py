@@ -535,6 +535,12 @@ if not st.session_state.get("admin_autenticado", False):
         [data-testid="stForm"] { border-radius: 18px !important; }
         .stApp { background-attachment: scroll !important; }
     }
+    /* Cores da identidade visual no acesso administrativo */
+    [data-testid="stForm"] {border-color:rgba(245,166,35,.45) !important;}
+    [data-testid="stFormSubmitButton"] button {background:#F5A623 !important;
+      color:#1D4E6A !important;border-color:#e79a1b !important;}
+    [data-testid="stFormSubmitButton"] button:hover {background:#e7981a !important;color:#1D4E6A !important;}
+    [data-testid="stForm"] [data-baseweb="input"] > div:focus-within {border-color:#6B9EAB !important;}
     </style>
     """.replace("__LOGIN_BG__", "data:image/jpeg;base64," + LOGIN_PRAIA_B64), unsafe_allow_html=True)
     st.title("Acesso administrativo")
@@ -878,6 +884,41 @@ st.markdown(
       .resort-search-hero h1 {font-size:2rem;}
       div[data-testid="stVerticalBlock"]:has(> div > div.resort-search-card-marker) {padding:14px;}
     }
+
+    /* PALETA OFICIAL SEREIAS & PRAIANOS — somente apresentação */
+    :root { --navy:#1D4E6A; --navy-2:#1D4E6A; --blue:#6B9EAB;
+      --sky:#e7f0f1; --ink:#1D4E6A; --muted:#526c72;
+      --line:#e5e3da; --surface:#fff; --bg:#F7F3E8; }
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] { background:#F7F3E8 !important; }
+    [data-testid="stSidebar"] { background:linear-gradient(170deg,#1D4E6A,#163c52 85%) !important; border-right:1px solid rgba(245,166,35,.35) !important; }
+    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
+      background:rgba(245,166,35,.22) !important; border-left:4px solid #F5A623 !important; }
+    [data-testid="stSidebar"] [role="radiogroup"] label:hover { background:rgba(107,158,171,.22) !important; }
+    [data-testid="stMain"] h1,[data-testid="stMain"] h2,[data-testid="stMain"] h3,
+    .section-heading,.dashboard-title,.result-title,.metric-value,.dash-card .value,
+    .resort-name {color:#1D4E6A !important;}
+    .dash-card,.home-panel,.metric-card,.result-card,.panel,.resort-benefit {border-color:#e7e3d9 !important;}
+    .dash-card .glyph,.dashboard-title svg,.result-title svg {color:#6B9EAB !important;}
+    .calendar-day.today {outline-color:#6B9EAB !important;}
+    .calendar-day.head,.detail-box {background:#f1eee5 !important;}
+    .calendar-day.pending {background:#fff0cf !important;color:#93600a !important;}
+    .today-dot {background:#6B9EAB !important;}.pending-dot {background:#F5A623 !important;}
+    [data-testid="stMain"] div.stButton > button[kind="primary"] {
+      background:#F5A623 !important; border:1px solid #d98b10 !important;
+      border-left:4px solid #3B593F !important; box-shadow:0 6px 16px rgba(92,64,20,.15) !important; }
+    [data-testid="stMain"] div.stButton > button[kind="primary"]:hover {background:#e69618 !important;}
+    [data-testid="stMain"] div.stButton > button[kind="primary"] p,
+    [data-testid="stMain"] div.stButton > button[kind="primary"] span,
+    [data-testid="stMain"] div.stButton > button[kind="primary"] {color:#183c4e !important;text-shadow:none !important;}
+    [data-testid="stMain"] div.stButton > button[kind="primary"] svg {color:#183c4e !important;stroke:#183c4e !important;}
+    [data-testid="stMain"] div.stButton > button[kind="primary"]:disabled {background:#a8b9b9 !important;border-color:#a8b9b9 !important;}
+    .status-pill {background:#e6efe4 !important;color:#3B593F !important;}
+    .resort-search-hero h1,.resort-search-hero h1 span {color:#1D4E6A !important;}
+    .resort-search-hero .eyebrow {color:#3B593F !important;}
+    .st-key-modo_pesquisa_premium [role="radiogroup"] > label:has(input:checked) {
+      background:#1D4E6A !important;border-color:#F5A623 !important;}
+    .resort-benefit .glyph {background:#fff1d8 !important;color:#a56b11 !important;}
+    .resort-benefit strong {color:#1D4E6A !important;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -4961,7 +5002,7 @@ with st.sidebar:
     st.markdown("---")
     menu = st.radio(
         "MENU PRINCIPAL",
-        ["Início", "Consultar cotas", "Gerenciar Reservas", "Cronogramas", "Cadastros"],
+        ["Início", "Consultar cotas", "Gerenciar Reservas", "Financeiro", "Cronogramas", "Cadastros"],
         label_visibility="visible",
         key="menu_principal",
     )
@@ -5671,6 +5712,103 @@ elif menu == "Gerenciar Reservas":
                                 st.error("O Supabase não confirmou a exclusão.")
                         except RuntimeError as erro:
                             st.error(f"Não foi possível excluir: {erro}")
+
+# ------------------------------------------------------------
+# FINANCEIRO — lançamentos independentes das reservas existentes
+# ------------------------------------------------------------
+elif menu == "Financeiro":
+    st.markdown('<div class="section-heading">Controle financeiro</div>', unsafe_allow_html=True)
+    st.caption("Vendas, repasses aos cotistas e despesas — Sereias & Praianos Resorts")
+    st.info("A administração é definida individualmente em cada venda. Despesas são lançadas separadamente e atribuídas à administração ou ao cotista.")
+
+    def financeiro_rpc(acao, dados=None):
+        return chamar_supabase("financeiro_admin", {"p_acao": acao, "p_dados": dados or {}})
+
+    try:
+        registros_fin = financeiro_rpc("listar")
+        if not isinstance(registros_fin, dict):
+            raise RuntimeError("Resposta financeira inesperada do banco.")
+    except RuntimeError as erro:
+        st.error("O módulo financeiro ainda não está disponível no Supabase. Execute primeiro o arquivo SQL fornecido.")
+        st.caption(str(erro))
+        st.stop()
+
+    vendas_fin = registros_fin.get("vendas") or []
+    despesas_fin = registros_fin.get("despesas") or []
+    def centavos(valor):
+        return Decimal(str(valor or 0))
+    total_vendido = sum((centavos(x.get("valor_venda")) for x in vendas_fin), Decimal("0"))
+    total_admin = sum((centavos(x.get("valor_administracao")) for x in vendas_fin), Decimal("0"))
+    total_cotistas = total_vendido - total_admin
+    despesas_admin = sum((centavos(x.get("valor")) for x in despesas_fin if x.get("responsavel") == "Administracao"), Decimal("0"))
+    despesas_cotistas = sum((centavos(x.get("valor")) for x in despesas_fin if x.get("responsavel") == "Cotista"), Decimal("0"))
+    a,b,c,d = st.columns(4)
+    a.metric("Vendas registradas", moeda_br(total_vendido))
+    b.metric("Administração (bruto)", moeda_br(total_admin))
+    c.metric("Cotistas (bruto)", moeda_br(total_cotistas))
+    d.metric("Despesas totais", moeda_br(despesas_admin + despesas_cotistas))
+    x,y = st.columns(2)
+    x.metric("Administração após despesas", moeda_br(total_admin - despesas_admin))
+    y.metric("Cotistas após despesas", moeda_br(total_cotistas - despesas_cotistas))
+    st.caption("Os totais representam lançamentos registrados, não pagamentos efetivamente recebidos ou repassados.")
+
+    aba_venda, aba_despesa, aba_historico = st.tabs(["Registrar venda", "Adicionar despesa", "Histórico"])
+    with aba_venda:
+        with st.form("fin_venda", clear_on_submit=True):
+            c1,c2 = st.columns(2)
+            with c1:
+                descricao = st.text_input("Descrição da venda *", placeholder="Ex.: Cota 12 — Premium Resort")
+                data_venda = st.date_input("Data da venda", value=date.today(), format="DD/MM/YYYY")
+                valor_venda = st.number_input("Valor total da venda (R$)", min_value=0.0, step=50.0, format="%.2f")
+            with c2:
+                cotista_nome = st.text_input("Nome do cotista *")
+                referencia = st.text_input("Referência / ID da reserva (opcional)")
+                valor_admin = st.number_input("Valor da administração (R$)", min_value=0.0, step=25.0, format="%.2f")
+            st.write("**Valor destinado ao cotista:**", moeda_br(Decimal(str(valor_venda)) - Decimal(str(valor_admin))))
+            salvar_venda = st.form_submit_button("Salvar venda", type="primary")
+        if salvar_venda:
+            if not descricao.strip() or not cotista_nome.strip() or valor_venda <= 0 or valor_admin > valor_venda:
+                st.error("Preencha descrição e cotista; a venda deve ser positiva e a administração não pode superar o valor vendido.")
+            else:
+                try:
+                    financeiro_rpc("criar_venda", {"descricao": descricao.strip(), "cotista": cotista_nome.strip(), "referencia": referencia.strip(), "data": data_venda.isoformat(), "valor_venda": str(Decimal(str(valor_venda))), "valor_administracao": str(Decimal(str(valor_admin)))})
+                    st.success("Venda registrada com sucesso.")
+                    st.rerun()
+                except RuntimeError as erro:
+                    st.error(f"Não foi possível registrar: {erro}")
+    with aba_despesa:
+        if not vendas_fin:
+            st.warning("Registre uma venda antes de vincular despesas.")
+        else:
+            opcoes = {f"{v['descricao']} — {v['cotista']} ({str(v['id'])[:8]})": v["id"] for v in vendas_fin}
+            with st.form("fin_despesa", clear_on_submit=True):
+                venda_sel = st.selectbox("Venda relacionada *", list(opcoes))
+                categoria = st.selectbox("Tipo de despesa", ["Limpeza", "Serviço de quarto", "Manutenção", "Lavanderia", "Outros"])
+                descricao_despesa = st.text_input("Descrição do serviço *")
+                responsavel = st.selectbox("Quem paga esta despesa?", ["Administracao", "Cotista"], format_func=lambda x: "Administração" if x == "Administracao" else "Cotista")
+                c1,c2 = st.columns(2)
+                with c1: data_despesa = st.date_input("Data da despesa", value=date.today(), format="DD/MM/YYYY")
+                with c2: valor_despesa = st.number_input("Valor da despesa (R$)", min_value=0.0, step=10.0, format="%.2f")
+                salvar_despesa = st.form_submit_button("Salvar despesa", type="primary")
+            if salvar_despesa:
+                if not descricao_despesa.strip() or valor_despesa <= 0:
+                    st.error("Informe a descrição e um valor maior que zero.")
+                else:
+                    try:
+                        financeiro_rpc("criar_despesa", {"venda_id": opcoes[venda_sel], "categoria": categoria, "descricao": descricao_despesa.strip(), "responsavel": responsavel, "data": data_despesa.isoformat(), "valor": str(Decimal(str(valor_despesa)))})
+                        st.success("Despesa registrada com sucesso.")
+                        st.rerun()
+                    except RuntimeError as erro:
+                        st.error(f"Não foi possível registrar: {erro}")
+    with aba_historico:
+        st.subheader("Vendas")
+        if vendas_fin:
+            st.dataframe(pd.DataFrame([{"Data":v.get("data"), "Descrição":v.get("descricao"), "Cotista":v.get("cotista"), "Reserva":v.get("referencia"), "Venda":moeda_br(v.get("valor_venda")), "Administração":moeda_br(v.get("valor_administracao")), "Cotista (bruto)":moeda_br(centavos(v.get("valor_venda"))-centavos(v.get("valor_administracao")))} for v in vendas_fin]), use_container_width=True, hide_index=True)
+        else: st.info("Nenhuma venda financeira registrada.")
+        st.subheader("Despesas")
+        if despesas_fin:
+            st.dataframe(pd.DataFrame([{"Data":x.get("data"), "Categoria":x.get("categoria"), "Descrição":x.get("descricao"), "Responsável":x.get("responsavel"), "Venda ID":x.get("venda_id"), "Valor":moeda_br(x.get("valor"))} for x in despesas_fin]), use_container_width=True, hide_index=True)
+        else: st.info("Nenhuma despesa registrada.")
 
 # ------------------------------------------------------------
 # CRONOGRAMAS
