@@ -1323,25 +1323,61 @@ elif menu == "Cadastros":
         if not opcoes:
             st.info("Cadastre um cotista primeiro.")
         else:
-            with st.form("vincular_cota"):
-                escolha = st.selectbox("Responsável *", list(opcoes))
-                resort = st.selectbox("Resort *", list(ARQUIVOS_RESORTS.keys()) + ["Aqualand", "Outro / não identificado"])
-                locais = list(base_dados.get(resort, {}).keys())
-                local = st.selectbox("Bloco / torre *", locais + ["Outro / conferir manualmente"]) if locais else st.text_input("Bloco / torre *")
-                apartamento = st.text_input("Apartamento *", placeholder="Ex.: 809")
-                uh = st.text_input("UH (unidade habitacional)", placeholder="Ex.: 901-2")
-                tipo_uh = st.text_input("Tipo de UH", placeholder="Ex.: 1 quarto, 2 quartos")
-                contrato = st.text_input("Contrato", placeholder="Número ou referência, se houver")
-                cota = st.text_input("Número da cota *", placeholder="Ex.: 10")
-                obs = st.text_area("Observações do vínculo", placeholder="Ex.: frente mar, 2 quartos, identificação pendente")
-                vincular = st.form_submit_button("Vincular cota", type="primary")
-            if vincular:
-                try:
-                    chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "vincular", "p_dados": {"cotista_id": opcoes[escolha]['id'], "resort": resort, "local": local, "apartamento": apartamento, "uh": uh, "tipo_uh": tipo_uh, "contrato": contrato, "cota": cota, "observacoes": obs}})
-                    st.success("Cota vinculada ao responsável!")
+            escolha = st.selectbox("Responsável *", list(opcoes), key="responsavel_multiplas_cotas")
+            cotista_atual = opcoes[escolha]
+            if "qtd_novos_vinculos" not in st.session_state:
+                st.session_state["qtd_novos_vinculos"] = 1
+
+            topo_a, topo_b = st.columns([3, 1])
+            with topo_a:
+                st.caption("Adicione um apartamento/cota por vez. O botão + abre outra unidade para o mesmo responsável.")
+            with topo_b:
+                if st.button("➕ Adicionar apartamento", key="adicionar_apartamento", use_container_width=True):
+                    st.session_state["qtd_novos_vinculos"] += 1
                     st.rerun()
-                except RuntimeError as erro:
-                    st.error(str(erro))
+
+            with st.form("vincular_multiplas_cotas"):
+                novos_vinculos = []
+                for i in range(st.session_state["qtd_novos_vinculos"]):
+                    st.markdown(f"**Apartamento / cota {i + 1}**")
+                    resort_i = st.selectbox("Resort *", list(ARQUIVOS_RESORTS.keys()) + ["Aqualand", "Outro / não identificado"], key=f"novo_resort_{i}")
+                    locais_i = list(base_dados.get(resort_i, {}).keys())
+                    if locais_i:
+                        local_i = st.selectbox("Bloco / torre *", locais_i + ["Outro / conferir manualmente"], key=f"novo_local_{i}")
+                    else:
+                        local_i = st.text_input("Bloco / torre *", key=f"novo_local_texto_{i}")
+                    apartamento_i = st.text_input("Apartamento *", key=f"novo_apartamento_{i}", placeholder="Ex.: 809")
+                    uh_i = st.text_input("UH (unidade habitacional)", key=f"novo_uh_{i}")
+                    tipo_uh_i = st.text_input("Tipo de UH", key=f"novo_tipo_uh_{i}")
+                    contrato_i = st.text_input("Contrato", key=f"novo_contrato_{i}")
+                    cota_i = st.text_input("Número da cota *", key=f"novo_cota_{i}")
+                    obs_i = st.text_area("Observações do vínculo", key=f"novo_obs_{i}")
+                    novos_vinculos.append({"cotista_id": cotista_atual["id"], "resort": resort_i, "local": local_i, "apartamento": apartamento_i.strip(), "uh": uh_i, "tipo_uh": tipo_uh_i, "contrato": contrato_i, "cota": cota_i.strip(), "observacoes": obs_i})
+                    if i < st.session_state["qtd_novos_vinculos"] - 1:
+                        st.divider()
+                vincular = st.form_submit_button("Salvar apartamentos / cotas", type="primary")
+
+            if vincular:
+                incompletos = [str(i + 1) for i, v in enumerate(novos_vinculos) if not all((v["resort"], v["local"], v["apartamento"], v["cota"]))]
+                chaves = [(v["resort"].strip().casefold(), v["local"].strip().casefold(), v["apartamento"].casefold(), v["cota"].casefold()) for v in novos_vinculos]
+                if incompletos:
+                    st.error("Preencha resort, bloco/torre, apartamento e cota nas unidades: " + ", ".join(incompletos))
+                elif len(chaves) != len(set(chaves)):
+                    st.error("Existem unidades repetidas neste formulário. Confira os apartamentos e as cotas.")
+                else:
+                    gravados = 0
+                    for i, dados_vinculo in enumerate(novos_vinculos, 1):
+                        try:
+                            chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "vincular", "p_dados": dados_vinculo})
+                            gravados += 1
+                        except RuntimeError as erro:
+                            st.error(f"Não foi possível salvar a unidade {i}: {erro}")
+                            st.warning(f"{gravados} unidade(s) foram salvas antes do erro. Consulte o cadastro antes de tentar novamente, para evitar duplicações.")
+                            break
+                    else:
+                        st.success(f"{gravados} apartamento(s)/cota(s) vinculados a {cotista_atual['nome']}!")
+                        st.session_state["qtd_novos_vinculos"] = 1
+                        st.rerun()
 
 
     with aba_editar_vinculo:
