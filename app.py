@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from datetime import date, datetime
 import calendar
+from decimal import Decimal
 
 import pandas as pd
 import streamlit as st
@@ -243,6 +244,14 @@ def chamar_supabase(funcao, dados):
         raise RuntimeError("Não foi possível conectar ao Supabase.") from erro
 
 
+def moeda_br(valor):
+    return f"R$ {Decimal(str(valor)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def dias_reserva(item):
+    return (datetime.strptime(item["saida"], "%d/%m/%Y") - datetime.strptime(item["entrada"], "%d/%m/%Y")).days
+
+
 def validar_cpf(cpf):
     digitos = re.sub(r"\D", "", cpf)
     if len(digitos) != 11 or len(set(digitos)) == 1:
@@ -329,11 +338,23 @@ def tela_cliente(token):
     resort_html = html.escape(str(reserva['resort']))
     cota_html = html.escape(str(reserva['cota']))
     periodo_html = html.escape(f"{data_cliente(reserva['checkin'])} a {data_cliente(reserva['checkout'])}")
+    try:
+        preco_cliente = chamar_supabase("consultar_valor_reserva", {"p_token": str(uuid.UUID(token))})
+        if not isinstance(preco_cliente, dict) or not preco_cliente.get("valido"):
+            raise RuntimeError("O valor da hospedagem não está disponível para este link.")
+    except (RuntimeError, ValueError, TypeError) as erro:
+        st.error(f"Não foi possível consultar o valor da reserva: {erro}")
+        st.stop()
     st.markdown(f"""<div class="booking-summary">
       <div class="booking-detail"><div class="small">RESORT</div><div class="value">{resort_html}</div></div>
       <div class="booking-detail"><div class="small">COTA</div><div class="value">{cota_html}</div></div>
       <div class="booking-detail"><div class="small">PERÍODO DA ESTADIA</div><div class="value">{periodo_html}</div></div>
     </div><div class="client-note">A confirmação é registrada automaticamente, sujeita à disponibilidade no momento do envio.</div>""", unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="background:#f1f8f4;border:1px solid #cfe6d6;border-radius:14px;padding:20px;margin:15px 0 23px;">'
+        f'<div style="color:#557565;font-size:.85rem;">VALOR TOTAL DA HOSPEDAGEM · {int(preco_cliente["diarias"])} DIÁRIAS</div>'
+        f'<div style="color:#0d5636;font-weight:800;font-size:2rem;">{html.escape(moeda_br(preco_cliente["total_cotista"]))}</div>'
+        f'</div>', unsafe_allow_html=True)
     st.markdown('<div class="client-section"><span class="gold">✦</span> Pessoas na hospedagem</div>', unsafe_allow_html=True)
     qtd = st.number_input("Quantidade de acompanhantes (além do hóspede principal, máximo de 7)", min_value=0, max_value=7, value=0, step=1, key="qtd_acompanhantes")
     st.markdown('<div class="client-section"><span class="gold">✦</span> Dados do hóspede principal</div>', unsafe_allow_html=True)
@@ -982,7 +1003,14 @@ elif menu == "Consultar cotas":
                         )
 
                         if st.session_state.get("cota_selecionada") == item:
-                            st.caption("Crie um link exclusivo para o cliente. O link expira em 48 horas.")
+                            st.caption("Informe os valores por diária. O cliente verá apenas o total do cotista. O link expira em 48 horas.")
+                            qtd_diarias = dias_reserva(item)
+                            col_val_cotista, col_val_adm = st.columns(2)
+                            with col_val_cotista:
+                                diaria_cotista = st.number_input("Diária do cotista (R$)", min_value=0.01, value=350.0, step=10.0, format="%.2f", key=f"cotista_{indice}_{item['resort']}_{item['cota']}")
+                            with col_val_adm:
+                                diaria_adm = st.number_input("Diária do ADM (R$)", min_value=0.0, value=100.0, step=10.0, format="%.2f", key=f"adm_{indice}_{item['resort']}_{item['cota']}")
+                            st.info(f"{qtd_diarias} diárias · Total cotista: {moeda_br(Decimal(str(diaria_cotista)) * qtd_diarias)} · Total ADM: {moeda_br(Decimal(str(diaria_adm)) * qtd_diarias)}")
                             if st.button("Gerar link de reserva", key=f"link_{indice}", type="primary"):
                                 try:
                                     reservas_revalidadas = chamar_supabase("listar_reservas_admin", {})
@@ -996,6 +1024,8 @@ elif menu == "Consultar cotas":
                                         "p_resort": item["resort"], "p_cota": item["cota"],
                                         "p_checkin": datetime.strptime(item["entrada"], "%d/%m/%Y").date().isoformat(),
                                         "p_checkout": datetime.strptime(item["saida"], "%d/%m/%Y").date().isoformat(),
+                                        "p_diaria_cotista": round(diaria_cotista, 2),
+                                        "p_diaria_adm": round(diaria_adm, 2),
                                     })
                                     st.session_state["link_gerado"] = f"{config_segura('APP_URL').rstrip('/')}?{urlencode({'reserva': token})}"
                                     st.session_state["link_gerado_para"] = item
@@ -1096,6 +1126,14 @@ elif menu == "Gerenciar Reservas":
                             d1.write(f"**Check-in:** {data_br(ficha.get('checkin'))}")
                             d2.write(f"**Check-out:** {data_br(ficha.get('checkout'))}")
                             st.write(f"**Situação:** {ficha.get('status') or '—'}")
+                            try:
+                                valores = chamar_supabase("consultar_valores_admin", {"p_reserva_id": id_reserva})
+                                if isinstance(valores, dict) and valores.get("encontrada"):
+                                    st.markdown("**Valores da reserva (somente administração)**")
+                                    st.write(f"Diária do cotista: {moeda_br(valores['diaria_cotista'])} · Total: {moeda_br(valores['total_cotista'])}")
+                                    st.write(f"Diária do ADM: {moeda_br(valores['diaria_adm'])} · Total: {moeda_br(valores['total_adm'])}")
+                            except RuntimeError:
+                                st.caption("Valores financeiros indisponíveis.")
                             hospede = ficha.get("hospede")
                             if isinstance(hospede, dict):
                                 st.markdown("**Hóspede principal**")
