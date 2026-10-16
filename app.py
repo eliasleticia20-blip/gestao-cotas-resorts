@@ -1292,7 +1292,63 @@ elif menu == "Consultar cotas":
                             unsafe_allow_html=True,
                         )
                         if not unidades:
-                            st.warning("Sem apartamento cadastrado para esta cota. Cadastre a unidade antes de reservar.")
+                            st.info("Cota sem apartamento cadastrado. Reserva disponível pelo modo tradicional, com bloqueio por cota e período.")
+                            # Para cotas sem unidade, usar a função antiga: ela valida conflitos
+                            # atomicamente no Supabase antes de gerar qualquer link.
+                            cota_chave = str(item["cota"]).strip().casefold()
+                            cota_numero = str(numero_cota).strip().casefold()
+                            conflito = False
+                            for registro in reservas_atuais:
+                                if str(registro.get("resort") or "").strip().casefold() != str(item["resort"]).strip().casefold():
+                                    continue
+                                if str(registro.get("cota") or "").strip().casefold() not in (cota_chave, cota_numero):
+                                    continue
+                                inicio = converter_data_reserva(registro.get("checkin"))
+                                fim = converter_data_reserva(registro.get("checkout"))
+                                if not inicio or not fim:
+                                    conflito = True
+                                    break
+                                entrada_item = datetime.strptime(item["entrada"], "%d/%m/%Y").date()
+                                saida_item = datetime.strptime(item["saida"], "%d/%m/%Y").date()
+                                if entrada_item < fim and saida_item > inicio:
+                                    status = str(registro.get("status") or "").lower()
+                                    if status in ("confirmado", "preenchido") or (status == "pendente" and not registro.get("expirado", False)):
+                                        conflito = True
+                                        break
+                            disponivel_legacy = consulta_reservas_ok and not conflito
+                            if disponivel_legacy:
+                                st.success("Disponível para reserva sem apartamento vinculado")
+                            else:
+                                st.warning("Indisponível ou não foi possível verificar as reservas")
+                            if st.button("Reservar esta cota", key=f"reservar_sem_unidade_{indice}", disabled=not disponivel_legacy):
+                                st.session_state["unidade_selecionada"] = (indice, "sem_unidade")
+                                st.session_state.pop("link_gerado", None)
+                                st.session_state.pop("link_gerado_para", None)
+                            if st.session_state.get("unidade_selecionada") == (indice, "sem_unidade") and disponivel_legacy:
+                                qtd_diarias = dias_reserva(item)
+                                col_cotista, col_adm = st.columns(2)
+                                with col_cotista:
+                                    diaria_cotista = st.number_input("Diária do cotista (R$)", min_value=0.01, value=350.0, step=10.0, format="%.2f", key=f"cotista_sem_unidade_{indice}")
+                                with col_adm:
+                                    diaria_adm = st.number_input("Diária do ADM (R$)", min_value=0.0, value=100.0, step=10.0, format="%.2f", key=f"adm_sem_unidade_{indice}")
+                                st.info(f"{qtd_diarias} diárias · Total cotista: {moeda_br(Decimal(str(diaria_cotista)) * qtd_diarias)} · Total ADM: {moeda_br(Decimal(str(diaria_adm)) * qtd_diarias)}")
+                                if st.button("Gerar link de reserva", key=f"link_sem_unidade_{indice}", type="primary"):
+                                    try:
+                                        # A função antiga faz a checagem final de conflito e a trava transacional.
+                                        token = chamar_supabase("criar_link_reserva", {
+                                            "p_resort": item["resort"], "p_cota": item["cota"],
+                                            "p_checkin": datetime.strptime(item["entrada"], "%d/%m/%Y").date().isoformat(),
+                                            "p_checkout": datetime.strptime(item["saida"], "%d/%m/%Y").date().isoformat(),
+                                            "p_diaria_cotista": round(diaria_cotista, 2),
+                                            "p_diaria_adm": round(diaria_adm, 2),
+                                        })
+                                        st.session_state["link_gerado"] = f"{config_segura('APP_URL').rstrip('/')}?{urlencode({'reserva': token})}"
+                                        st.session_state["link_gerado_para"] = (indice, "sem_unidade")
+                                    except (RuntimeError, ValueError, TypeError) as erro:
+                                        st.error(f"Não foi possível gerar o link: {erro}")
+                                if st.session_state.get("link_gerado") and st.session_state.get("link_gerado_para") == (indice, "sem_unidade"):
+                                    st.code(st.session_state["link_gerado"], language=None)
+                                    st.caption("Copie e envie ao cliente pelo WhatsApp.")
                         else:
                             st.caption("Disponibilidade independente por apartamento:")
                         for unidade in unidades:
