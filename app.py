@@ -103,6 +103,105 @@ def icone(nome, tamanho=24, cor="currentColor"):
             f'stroke-linejoin="round" aria-hidden="true">{caminho}</svg>')
 
 
+# Leitor PDF incorporado ao arquivo original (sem módulo separado).
+"""Leitura posicional dos cronogramas Salinas. Requer PyMuPDF (fitz)."""
+import fitz
+
+ARQUIVOS_PDF = {
+    'Beach Resort': 'Beath Resort.pdf',
+    'Exclusive Resort': 'Exclusive Resort.pdf',
+    'Park Resort': 'Park Resort.pdf',
+    'Premium Resort': 'Premium Resort.pdf',
+}
+DATA_RE = re.compile(r'^\d{2}/\d{2}/\d{4}$')
+
+
+def ler_pagina(page, resort, numero_pagina):
+    palavras = page.get_text('words')
+    cabecalho = ' '.join(w[4] for w in sorted((w for w in palavras if 10 < w[1] < 67), key=lambda w:(round(w[1]/9),w[0])))
+    if 'Cronograma' not in cabecalho or 'Resort' not in cabecalho:
+        return [], None
+    partes = re.search(r'(Bloco\s*\d+[^\n]*|Torre\s+[\wÀ-ÿ-]+)', cabecalho, re.I)
+    local = partes.group(1).strip() if partes else 'Local não identificado'
+    # Retirar textos alheios ao nome do bloco, como títulos de outras seções.
+    if local.lower().startswith('bloco'):
+        local = re.split(r'\s+(?:COTA|CHECK-IN|20\d{2})\b', local, maxsplit=1, flags=re.I)[0]
+    # Identificar coordenadas do cabeçalho da tabela para estabelecer as colunas.
+    heads = [w for w in palavras if w[4].upper() in ('COTA', 'CHECK-IN', 'CHECK-OUT') and 55 < w[1] < 105]
+    hc = next((w for w in heads if w[4].upper() == 'COTA'), None)
+    hi = next((w for w in heads if w[4].upper() == 'CHECK-IN'), None)
+    ho = next((w for w in heads if w[4].upper() == 'CHECK-OUT'), None)
+    if not all((hc,hi,ho)):
+        return [], f'{resort}: página {numero_pagina}, cabeçalho da tabela não identificado'
+    lim_cota = (hc[2] + hi[0])/2
+    lim_entrada = (hi[2] + ho[0])/2
+    lim_saida = ho[2] + 13
+    # Rótulos de cotas são células mescladas, centralizadas verticalmente.
+    cotas = sorted([((w[1]+w[3])/2, w[4]) for w in palavras if w[0] < lim_cota and w[1] > hc[3] and (w[4].isdigit() or w[4].upper() == 'ADM')])
+    if not cotas:
+        return [], f'{resort}: página {numero_pagina}, nenhuma cota identificada'
+    entradas = sorted([w for w in palavras if lim_cota < (w[0]+w[2])/2 < lim_entrada + 8 and DATA_RE.fullmatch(w[4]) and w[1] > hc[3]], key=lambda w:w[1])
+    saidas = [w for w in palavras if lim_entrada < (w[0]+w[2])/2 < lim_saida and DATA_RE.fullmatch(w[4]) and w[1] > hc[3]]
+    linhas=[]
+    for ent in entradas:
+        cy=(ent[1]+ent[3])/2
+        sai=min(saidas, key=lambda w:abs((w[1]+w[3])/2-cy), default=None)
+        if sai is None or abs((sai[1]+sai[3])/2-cy)>5:
+            return [], f'{resort}: página {numero_pagina}, check-out não encontrado'
+        # Atribuir pela distância ao centro da célula mesclada, não por ffill.
+        cota=min(cotas, key=lambda x:abs(x[0]-cy))[1]
+        if cota.upper()=='ADM':
+            continue
+        try:
+            di=datetime.strptime(ent[4],'%d/%m/%Y')
+            df=datetime.strptime(sai[4],'%d/%m/%Y')
+            if df<=di or (df-di).days>35:
+                raise ValueError('intervalo inconsistente')
+        except ValueError:
+            return [], f'{resort}: página {numero_pagina}, intervalo inválido: {ent[4]} - {sai[4]}'
+        outros=[w for w in palavras if w[0]>365 and abs((w[1]+w[3])/2-cy)<4.5 and w[1]>hc[3]]
+        periodo=' '.join(w[4] for w in sorted(outros,key=lambda w:w[0]))
+        linhas.append({'Cota':str(cota),'Check-in':di,'Check-out':df,'Período':periodo,'Local':local,'Página PDF':numero_pagina})
+    if not linhas:
+        return [], f'{resort}: página {numero_pagina}, nenhuma data identificada'
+    # Todas as cotas numéricas precisam ter pelo menos uma data.
+    faltantes={v for _,v in cotas if v.isdigit()}-{x['Cota'] for x in linhas}
+    if faltantes:
+        return [], f'{resort}: página {numero_pagina}, cotas sem datas: {sorted(faltantes)}'
+    return linhas, None
+
+
+def carregar_pdfs(diretorio='.'):
+    dados={}
+    avisos=[]
+    for resort,arquivo in ARQUIVOS_PDF.items():
+        caminho=os.path.join(diretorio,arquivo)
+        if not os.path.isfile(caminho):
+            dados[resort]={}
+            avisos.append(f'Arquivo não encontrado: {arquivo}')
+            continue
+        registros=[]
+        try:
+            with fitz.open(caminho) as pdf:
+                for indice,pagina in enumerate(pdf):
+                    # Páginas de capa e divisórias não possuem tabelas.
+                    if 'CHECK-IN' not in pagina.get_text():
+                        continue
+                    linhas,erro=ler_pagina(pagina,resort,indice+1)
+                    if erro:
+                        avisos.append(erro)
+                    else:
+                        registros.extend(linhas)
+        except Exception as exc:
+            avisos.append(f'Erro ao abrir {arquivo}: {exc}')
+        if registros:
+            df=pd.DataFrame(registros)
+            dados[resort]={local:grupo.reset_index(drop=True) for local,grupo in df.groupby('Local',sort=False)}
+        else:
+            dados[resort]={}
+    return dados,avisos
+
+
 # ------------------------------------------------------------
 # CONFIGURACAO
 # ------------------------------------------------------------
@@ -113,12 +212,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-ARQUIVOS_RESORTS = {
-    "Beach Resort": "Salinas Beach Resort.xlsx",
-    "Exclusive Resort": "Salinas Exclusive Resort.xlsx",
-    "Park Resort": "Salinas Park Resort.xlsx",
-    "Premium Resort": "Salinas Premium Resort.xlsx",
-}
+ARQUIVOS_RESORTS = ARQUIVOS_PDF
 
 # A chave secreta fica exclusivamente no servidor Streamlit.
 def config_segura(nome):
@@ -550,86 +644,25 @@ st.markdown(
 )
 
 # ------------------------------------------------------------
-# LEITURA DOS EXCEL
+# LEITURA DOS CRONOGRAMAS PDF
 # ------------------------------------------------------------
 @st.cache_data(show_spinner=False)
-def carregar_todos_os_dados():
-    dados_consolidados = {}
-    avisos = []
+def carregar_todos_os_dados(assinaturas):
+    dados, avisos = carregar_pdfs('.')
+    base = {}
+    for resort, locais in dados.items():
+        base[resort] = {}
+        for local, tabela in locais.items():
+            df = tabela.copy()
+            # A chave completa impede que cotas de locais distintos se misturem.
+            df.insert(0, 'Identificação da cota', df['Local'] + ' | Cota ' + df['Cota'].astype(str))
+            base[resort][local] = df
+    return base, avisos
 
-    for nome_resort, arquivo in ARQUIVOS_RESORTS.items():
-        if not os.path.exists(arquivo):
-            dados_consolidados[nome_resort] = {}
-            avisos.append(f"Arquivo não encontrado: {arquivo}")
-            continue
-
-        try:
-            abas = pd.read_excel(arquivo, sheet_name=None, header=None)
-            abas_validas = {}
-
-            for aba_nome, bruto in abas.items():
-                linha_cabecalho = None
-                palavras_chave = ("CHECK", "COTA", "UNIDADE", "DATA", "ENTRADA", "SAÍDA", "SAIDA")
-
-                for idx, row in bruto.iterrows():
-                    texto = " ".join(row.fillna("").astype(str).str.upper().tolist())
-                    if any(palavra in texto for palavra in palavras_chave):
-                        linha_cabecalho = idx
-                        break
-
-                if linha_cabecalho is None:
-                    linha_cabecalho = 2 if len(bruto) > 2 else 0
-
-                df = pd.read_excel(arquivo, sheet_name=aba_nome, header=linha_cabecalho)
-                df = df.dropna(how="all")
-                if df.empty:
-                    continue
-
-                df.columns = [
-                    str(c).strip() if not str(c).startswith("Unnamed:") else f"Coluna {i + 1}"
-                    for i, c in enumerate(df.columns)
-                ]
-                primeira_coluna = df.columns[0]
-                df[primeira_coluna] = df[primeira_coluna].ffill()
-                abas_validas[aba_nome] = df
-
-            dados_consolidados[nome_resort] = abas_validas
-        except Exception as exc:
-            dados_consolidados[nome_resort] = {}
-            avisos.append(f"Não foi possível ler {arquivo}: {exc}")
-
-    return dados_consolidados, avisos
-
-
-def localizar_colunas_data(df):
-    col_checkin, col_checkout = None, None
-
-    for coluna in df.columns:
-        nome = str(coluna).strip().upper()
-        if col_checkin is None and any(x in nome for x in ("CHECK-IN", "CHECKIN", "ENTRADA", "DATA INICIAL", "INÍCIO", "INICIO")):
-            col_checkin = coluna
-        if col_checkout is None and any(x in nome for x in ("CHECK-OUT", "CHECKOUT", "SAÍDA", "SAIDA", "TÉRMINO", "TERMINO", "DATA FINAL", "FINAL")):
-            col_checkout = coluna
-
-    # Fallback apenas quando os cabeçalhos não ajudam.
-    if col_checkin is None and len(df.columns) > 1:
-        col_checkin = df.columns[1]
-    if col_checkout is None and len(df.columns) > 2:
-        col_checkout = df.columns[2]
-
-    return col_checkin, col_checkout
-
-
-def data_segura(valor):
-    if pd.isna(valor):
-        return pd.NaT
-    try:
-        return pd.to_datetime(valor, errors="coerce", dayfirst=True)
-    except (ValueError, TypeError):
-        return pd.NaT
-
-
-base_dados, avisos_arquivos = carregar_todos_os_dados()
+assinaturas_pdf = tuple((nome, os.path.getmtime(arquivo), os.path.getsize(arquivo))
+    if os.path.isfile(arquivo) else (nome, None, None)
+    for nome, arquivo in ARQUIVOS_RESORTS.items())
+base_dados, avisos_arquivos = carregar_todos_os_dados(assinaturas_pdf)
 total_abas = sum(len(abas) for abas in base_dados.values())
 total_resorts_com_dados = sum(bool(abas) for abas in base_dados.values())
 
@@ -648,15 +681,15 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Painel administrativo")
     st.caption("Consulta de períodos e cotas")
-    if st.button("Atualizar planilhas", icon=":material/refresh:", use_container_width=True):
+    if st.button("Atualizar PDFs", icon=":material/refresh:", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
 
 # Avisos dos arquivos, sem interromper a aplicação
 if avisos_arquivos:
-    with st.expander("Verificar arquivos Excel", expanded=False):
-        st.warning("Confira se os quatro arquivos estão na mesma pasta do aplicativo.")
+    with st.expander("Verificar arquivos PDF", expanded=False):
+        st.warning("Confira se os quatro PDFs estão na mesma pasta do aplicativo.")
         for aviso in avisos_arquivos:
             st.write(f"• {aviso}")
 
@@ -678,8 +711,11 @@ def situacao_cota(item, registros):
     entrada = datetime.strptime(item["entrada"], "%d/%m/%Y").date()
     saida = datetime.strptime(item["saida"], "%d/%m/%Y").date()
     for registro in registros:
+        cota_reserva = str(registro.get("cota") or "").strip().casefold()
+        cota_completa = str(item["cota"]).strip().casefold()
+        cota_simples = cota_completa.rsplit(' | cota ', 1)[-1]
         if (str(registro.get("resort") or "").strip().casefold() != str(item["resort"]).strip().casefold()
-                or str(registro.get("cota") or "").strip().casefold() != str(item["cota"]).strip().casefold()):
+                or cota_reserva not in (cota_completa, cota_simples)):
             continue
         inicio = converter_data_reserva(registro.get("checkin"))
         fim = converter_data_reserva(registro.get("checkout"))
@@ -697,7 +733,7 @@ def situacao_cota(item, registros):
 
 
 # ------------------------------------------------------------
-# PAINEL INICIAL - dados reais das planilhas e do Supabase
+# PAINEL INICIAL - dados reais dos PDFs e do Supabase
 # ------------------------------------------------------------
 if menu == "Início":
     st.markdown("""
@@ -724,7 +760,7 @@ if menu == "Início":
     pendentes = sum(r.get("status") == "pendente" and not r.get("expirado") for r in registros_inicio)
     canceladas = sum(r.get("status") == "cancelado" for r in registros_inicio)
     metricas = [
-        ("Períodos nas planilhas", str(total_periodos), "calendar"),
+        ("Períodos nos PDFs", str(total_periodos), "calendar"),
         ("Reservas confirmadas", str(confirmadas) if not erro_inicio else "—", "check"),
         ("Links pendentes", str(pendentes) if not erro_inicio else "—", "link"),
         ("Resorts com dados", str(total_resorts_com_dados), "building"),
@@ -788,7 +824,7 @@ if menu == "Início":
         linhas = ''
         for resort, abas in base_dados.items():
             qtd = sum(len(df) for df in abas.values())
-            linhas += f'<div class="resort-row"><div class="resort-name">{html.escape(resort)}</div><div class="resort-meta">{qtd} registros nas planilhas</div></div>'
+            linhas += f'<div class="resort-row"><div class="resort-name">{html.escape(resort)}</div><div class="resort-meta">{qtd} registros nos PDFs</div></div>'
         st.markdown(f'<div class="home-panel">{linhas}</div>', unsafe_allow_html=True)
     st.caption(f"Reservas canceladas no histórico: {canceladas}" if not erro_inicio else "Histórico de reservas temporariamente indisponível.")
 
@@ -812,7 +848,7 @@ elif menu == "Consultar cotas":
                 "Preferência de andar",
                 ["Qualquer andar", "Andar alto", "Andar médio", "Andar baixo"],
             )
-            st.caption("A preferência de andar só será aplicada quando essa informação existir na planilha.")
+            st.caption("A preferência de andar é informativa; confira o pavimento nos resultados.")
 
         col_in, col_out = st.columns(2)
         with col_in:
@@ -832,50 +868,23 @@ elif menu == "Consultar cotas":
             resorts_alvo = list(ARQUIVOS_RESORTS.keys()) if resort_selecionado == "Todos os resorts" else [resort_selecionado]
             resultados = []
 
-            with st.spinner("Consultando as planilhas..."):
+            with st.spinner("Consultando os PDFs..."):
                 for nome_resort in resorts_alvo:
                     for nome_aba, df_original in base_dados.get(nome_resort, {}).items():
-                        df = df_original.copy()
-                        col_in_excel, col_out_excel = localizar_colunas_data(df)
-
-                        if col_in_excel is None or col_out_excel is None:
-                            continue
-
-                        df["_data_in"] = df[col_in_excel].apply(data_segura)
-                        df["_data_out"] = df[col_out_excel].apply(data_segura)
-
-                        # Intervalo de hospedagem: check-out é exclusivo.
-                        # O período cadastrado deve cobrir toda a estadia solicitada.
-                        inicio = pd.Timestamp(data_entrada)
-                        fim = pd.Timestamp(data_saida)
-                        filtro = (
-                            df["_data_in"].notna()
-                            & df["_data_out"].notna()
-                            & (df["_data_in"] <= inicio)
-                            & (df["_data_out"] >= fim)
-                        )
-
-                        for _, linha in df.loc[filtro].iterrows():
-                            cota = linha.iloc[0]
-                            detalhes = []
-                            for coluna in df.columns:
-                                nome_coluna = str(coluna).lower()
-                                if coluna in ("_data_in", "_data_out", col_in_excel, col_out_excel):
-                                    continue
-                                if any(p in nome_coluna for p in ("andar", "torre", "bloco", "apartamento", "unidade", "observ")):
-                                    valor = linha[coluna]
-                                    if pd.notna(valor) and str(valor).strip().lower() != "nan":
-                                        detalhes.append(f"{coluna}: {valor}")
-
+                        for _, linha in df_original.iterrows():
+                            inicio = linha['Check-in'].date()
+                            fim = linha['Check-out'].date()
+                            if inicio > data_entrada or fim < data_saida:
+                                continue
+                            cota_id = str(linha['Identificação da cota'])
                             resultados.append({
-                                "resort": nome_resort,
-                                "cota": str(cota),
-                                "aba": nome_aba,
-                                "entrada": linha["_data_in"].strftime("%d/%m/%Y"),
-                                "saida": linha["_data_out"].strftime("%d/%m/%Y"),
-                                "detalhes": " • ".join(detalhes) if detalhes else "Sem detalhes adicionais na planilha",
+                                'resort': nome_resort,
+                                'cota': cota_id,
+                                'aba': nome_aba,
+                                'entrada': inicio.strftime('%d/%m/%Y'),
+                                'saida': fim.strftime('%d/%m/%Y'),
+                                'detalhes': f"Cota {linha['Cota']} • {nome_aba} • {linha['Período'] or 'Período comum'} • Página {linha['Página PDF']} do PDF",
                             })
-
             st.markdown("---")
             st.markdown('<div class="section-heading">Resultado da consulta</div>', unsafe_allow_html=True)
             st.markdown(
@@ -889,10 +898,10 @@ elif menu == "Consultar cotas":
             with c2:
                 st.markdown(f'<div class="metric-card"><div class="metric-label">Resorts consultados</div><div class="metric-value">{len(resorts_alvo)}</div></div>', unsafe_allow_html=True)
             with c3:
-                st.markdown(f'<div class="metric-card"><div class="metric-label">Planilhas com dados</div><div class="metric-value">{total_resorts_com_dados}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card"><div class="metric-label">PDFs com dados</div><div class="metric-value">{total_resorts_com_dados}</div></div>', unsafe_allow_html=True)
 
             if resultados:
-                st.caption("Os períodos vêm das planilhas; a ocupação é consultada no Supabase a cada atualização da página.")
+                st.caption("Os períodos vêm dos PDFs; a ocupação é consultada no Supabase a cada atualização da página.")
                 try:
                     reservas_atuais = chamar_supabase("listar_reservas_admin", {})
                     if isinstance(reservas_atuais, str):
@@ -905,9 +914,16 @@ elif menu == "Consultar cotas":
                     consulta_reservas_ok = False
                     st.error(f"Não foi possível verificar as reservas no Supabase: {erro}. Por segurança, novas reservas estão bloqueadas até a conexão voltar.")
 
+                if avisos_arquivos:
+                    st.error("Há páginas com erro de leitura ou PDFs ausentes. Por segurança, a criação de reservas fica bloqueada até corrigir os avisos.")
+                    consulta_reservas_ok = False
+
+                if not config_segura("PDF_RESERVAS_HABILITADAS"):
+                    st.info("Modo de validação: consulta dos PDFs liberada; novas reservas desabilitadas até conferir a compatibilidade do Supabase com a identificação completa da cota.")
+
                 for indice, item in enumerate(resultados):
                     situacao = situacao_cota(item, reservas_atuais) if consulta_reservas_ok else "Verificação indisponível"
-                    disponivel = situacao == "Disponível"
+                    disponivel = situacao == "Disponível" and consulta_reservas_ok and bool(config_segura("PDF_RESERVAS_HABILITADAS"))
                     if not disponivel and st.session_state.get("cota_selecionada") == item:
                         st.session_state.pop("cota_selecionada", None)
                         st.session_state.pop("link_gerado", None)
@@ -922,8 +938,8 @@ elif menu == "Consultar cotas":
                                 unsafe_allow_html=True,
                             )
                         with topo_status:
-                            if disponivel:
-                                st.success("Disponível")
+                            if situacao == "Disponível":
+                                st.success("Disponível (consulta)")
                             elif situacao == "Reservada":
                                 st.error("Reservada")
                             else:
@@ -951,7 +967,7 @@ elif menu == "Consultar cotas":
                                     <div class="detail-value">{html.escape(str(item['saida']))}</div>
                                 </div>
                                 <div class="detail-box">
-                                    <div class="detail-label">ABA / PERÍODO</div>
+                                    <div class="detail-label">BLOCO / PAVIMENTO</div>
                                     <div class="detail-value">{html.escape(str(item['aba']))}</div>
                                 </div>
                             </div>
@@ -1156,14 +1172,14 @@ elif menu == "Gerenciar Reservas":
 # ------------------------------------------------------------
 elif menu == "Cronogramas":
     st.markdown('<div class="section-heading">Cronogramas dos resorts</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtitle">Consulte os dados importados dos arquivos Excel.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Consulte os períodos extraídos dos cronogramas PDF.</div>', unsafe_allow_html=True)
 
     col_r, col_a = st.columns(2)
     with col_r:
         resort_bruto = st.selectbox("Selecione o resort", list(ARQUIVOS_RESORTS.keys()))
     abas = base_dados.get(resort_bruto, {})
     with col_a:
-        aba_bruta = st.selectbox("Selecione a aba / período", list(abas.keys()) if abas else ["Nenhuma aba encontrada"])
+        aba_bruta = st.selectbox("Selecione o bloco / torre", list(abas.keys()) if abas else ["Nenhum local encontrado"])
 
     if abas and aba_bruta in abas:
         df_exibir = abas[aba_bruta]
@@ -1173,7 +1189,7 @@ elif menu == "Cronogramas":
                 lambda coluna: coluna.str.contains(filtro_texto, case=False, na=False, regex=False)
             ).any(axis=1)
             df_exibir = df_exibir[mascara]
-        st.caption(f"{len(df_exibir)} linha(s) exibida(s) • Aba: {aba_bruta}")
+        st.caption(f"{len(df_exibir)} linha(s) exibida(s) • Local: {aba_bruta}")
         st.dataframe(df_exibir, use_container_width=True, hide_index=True)
         st.download_button(
             "Baixar esta tabela em CSV",
@@ -1183,7 +1199,7 @@ elif menu == "Cronogramas":
             mime="text/csv",
         )
     else:
-        st.warning("Nenhum dado foi encontrado para este resort. Confira se o arquivo Excel está na pasta do aplicativo.")
+        st.warning("Nenhum dado foi encontrado para este resort. Confira se o PDF está na pasta do aplicativo.")
 
 # ------------------------------------------------------------
 # CADASTROS
