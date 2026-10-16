@@ -1328,16 +1328,9 @@ elif menu == "Cadastros":
             if "qtd_novos_vinculos" not in st.session_state:
                 st.session_state["qtd_novos_vinculos"] = 1
 
-            topo_a, topo_b = st.columns([3, 1])
-            with topo_a:
-                st.markdown("**Apartamento / cota 1**")
-            with topo_b:
-                if st.button("➕ Adicionar apartamento", key="adicionar_apartamento", use_container_width=True):
-                    st.session_state["qtd_novos_vinculos"] += 1
-                    st.rerun()
-
             with st.form("vincular_multiplas_cotas"):
                 novos_vinculos = []
+                adicionar_apartamento = False
                 for i in range(st.session_state["qtd_novos_vinculos"]):
                     if i > 0:
                         st.markdown(f"**Apartamento / cota {i + 1}**")
@@ -1347,7 +1340,12 @@ elif menu == "Cadastros":
                         local_i = st.selectbox("Bloco / torre *", locais_i + ["Outro / conferir manualmente"], key=f"novo_local_{i}")
                     else:
                         local_i = st.text_input("Bloco / torre *", key=f"novo_local_texto_{i}")
-                    apartamento_i = st.text_input("Apartamento *", key=f"novo_apartamento_{i}", placeholder="Ex.: 809")
+                    col_apartamento, col_mais = st.columns([4, 1], vertical_alignment="bottom")
+                    with col_apartamento:
+                        apartamento_i = st.text_input("Apartamento *", key=f"novo_apartamento_{i}", placeholder="Ex.: 809")
+                    with col_mais:
+                        if i == st.session_state["qtd_novos_vinculos"] - 1:
+                            adicionar_apartamento = st.form_submit_button("➕ Adicionar", use_container_width=True)
                     uh_i = st.text_input("UH (unidade habitacional)", key=f"novo_uh_{i}")
                     tipo_uh_i = st.text_input("Tipo de UH", key=f"novo_tipo_uh_{i}")
                     contrato_i = st.text_input("Contrato", key=f"novo_contrato_{i}")
@@ -1357,6 +1355,10 @@ elif menu == "Cadastros":
                     if i < st.session_state["qtd_novos_vinculos"] - 1:
                         st.divider()
                 vincular = st.form_submit_button("Salvar apartamentos / cotas", type="primary")
+
+            if adicionar_apartamento:
+                st.session_state["qtd_novos_vinculos"] += 1
+                st.rerun()
 
             if vincular:
                 incompletos = [str(i + 1) for i, v in enumerate(novos_vinculos) if not all((v["resort"], v["local"], v["apartamento"], v["cota"]))]
