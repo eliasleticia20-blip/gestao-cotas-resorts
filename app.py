@@ -1330,7 +1330,7 @@ elif menu == "Cadastros":
 
             topo_a, topo_b = st.columns([3, 1])
             with topo_a:
-                st.caption("Adicione um apartamento/cota por vez. O botão + abre outra unidade para o mesmo responsável.")
+                st.markdown("**Apartamento / cota 1**")
             with topo_b:
                 if st.button("➕ Adicionar apartamento", key="adicionar_apartamento", use_container_width=True):
                     st.session_state["qtd_novos_vinculos"] += 1
@@ -1339,7 +1339,8 @@ elif menu == "Cadastros":
             with st.form("vincular_multiplas_cotas"):
                 novos_vinculos = []
                 for i in range(st.session_state["qtd_novos_vinculos"]):
-                    st.markdown(f"**Apartamento / cota {i + 1}**")
+                    if i > 0:
+                        st.markdown(f"**Apartamento / cota {i + 1}**")
                     resort_i = st.selectbox("Resort *", list(ARQUIVOS_RESORTS.keys()) + ["Aqualand", "Outro / não identificado"], key=f"novo_resort_{i}")
                     locais_i = list(base_dados.get(resort_i, {}).keys())
                     if locais_i:
