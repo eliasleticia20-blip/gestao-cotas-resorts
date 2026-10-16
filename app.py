@@ -661,12 +661,24 @@ st.markdown(
     @media(max-width:700px){ .hero {padding:34px 22px;min-height:260px;} .home-panel {padding:14px;} }
 
     /* Tema resort premium — aplicado somente ao painel administrativo */
-    .stApp {
-      background:
-        linear-gradient(180deg,rgba(246,249,252,.12) 0%,#f7f4ef 850px),
-        url('https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=2000&q=85')
-        center top / 100% auto no-repeat !important;
+    /* Foto apenas no banner da consulta: páginas administrativas opacas e legíveis. */
+    .stApp { background:#f3f6fa !important; background-image:none !important; }
+    [data-testid="stAppViewContainer"] {background:#f3f6fa !important;}
+    [data-testid="stMain"] {background:#f3f6fa !important;}
+    [data-testid="stMainBlockContainer"] {background:transparent !important;}
+    [data-testid="stMain"] h1, [data-testid="stMain"] h2,
+    [data-testid="stMain"] h3, [data-testid="stMain"] p,
+    [data-testid="stMain"] label, [data-testid="stMain"] [data-testid="stMetricLabel"] {
+      color:#152d49;
     }
+    [data-testid="stMain"] [data-testid="stMetricValue"] {color:#0b294a !important;}
+    [data-testid="stMain"] [data-testid="stCaptionContainer"] p {color:#526579 !important;}
+    [data-testid="stMain"] [data-testid="stAlert"] {background:#e8f2fd !important;}
+    [data-testid="stMain"] [data-testid="stAlert"] p {color:#15436d !important;}
+    [data-testid="stMain"] [data-testid="stWidgetLabel"] p {font-weight:650 !important;}
+    [data-testid="stMain"] input {color:#172d45 !important;}
+    .resort-search-hero p {color:#3e5875 !important;}
+    .resort-search-hero h1 {color:#071f40 !important;}
     [data-testid="stHeader"] { background:transparent !important; }
     [data-testid="stSidebar"] {
       background:linear-gradient(165deg,#041b38,#092746 55%,#03152e) !important;
