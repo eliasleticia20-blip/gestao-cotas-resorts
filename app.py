@@ -1275,7 +1275,7 @@ elif menu == "Cadastros":
                     st.write(f"**Observações:** {c['observacoes']}")
                 for v in c.get('vinculos') or []:
                     col_desc, col_del = st.columns([5, 1])
-                    col_desc.write(f"{v['resort']} · {v['local']} · Apto {v['apartamento']} · Cota {v['cota']}")
+                    col_desc.write(f"{v['resort']} · {v['local']} · Andar {v.get('andar') or '—'} · Apto {v['apartamento']} · Cota {v['cota']}")
                     col_desc.caption(f"UH: {v.get('uh') or '—'} · Tipo UH: {v.get('tipo_uh') or '—'} · Contrato: {v.get('contrato') or '—'}")
                     if col_del.button("Desvincular", key=f"desv_{v['id']}"):
                         try:
@@ -1340,6 +1340,7 @@ elif menu == "Cadastros":
                         local_i = st.selectbox("Bloco / torre *", locais_i + ["Outro / conferir manualmente"], key=f"novo_local_{i}")
                     else:
                         local_i = st.text_input("Bloco / torre *", key=f"novo_local_texto_{i}")
+                    andar_i = st.text_input("Andar", key=f"novo_andar_{i}", placeholder="Ex.: 08")
                     col_apartamento, col_mais = st.columns([4, 1], vertical_alignment="bottom")
                     with col_apartamento:
                         apartamento_i = st.text_input("Apartamento *", key=f"novo_apartamento_{i}", placeholder="Ex.: 809")
@@ -1351,7 +1352,7 @@ elif menu == "Cadastros":
                     contrato_i = st.text_input("Contrato", key=f"novo_contrato_{i}")
                     cota_i = st.text_input("Número da cota *", key=f"novo_cota_{i}")
                     obs_i = st.text_area("Observações do vínculo", key=f"novo_obs_{i}")
-                    novos_vinculos.append({"cotista_id": cotista_atual["id"], "resort": resort_i, "local": local_i, "apartamento": apartamento_i.strip(), "uh": uh_i, "tipo_uh": tipo_uh_i, "contrato": contrato_i, "cota": cota_i.strip(), "observacoes": obs_i})
+                    novos_vinculos.append({"cotista_id": cotista_atual["id"], "resort": resort_i, "local": local_i, "apartamento": apartamento_i.strip(), "andar": andar_i.strip(), "uh": uh_i, "tipo_uh": tipo_uh_i, "contrato": contrato_i, "cota": cota_i.strip(), "observacoes": obs_i})
                     if i < st.session_state["qtd_novos_vinculos"] - 1:
                         st.divider()
                 vincular = st.form_submit_button("Salvar apartamentos / cotas", type="primary")
@@ -1394,6 +1395,7 @@ elif menu == "Cadastros":
             with st.form(f"editar_vinculo_form_{v['id']}"):
                 resort_ed = st.text_input("Resort *", value=v.get("resort") or "")
                 local_ed = st.text_input("Bloco / torre *", value=v.get("local") or "")
+                andar_ed = st.text_input("Andar", value=v.get("andar") or "")
                 apartamento_ed = st.text_input("Apartamento *", value=v.get("apartamento") or "")
                 cota_ed = st.text_input("Cota *", value=v.get("cota") or "")
                 uh_ed = st.text_input("UH", value=v.get("uh") or "")
@@ -1405,7 +1407,7 @@ elif menu == "Cadastros":
                 try:
                     chamar_supabase("gerenciar_cotistas_admin", {"p_acao": "editar_vinculo", "p_dados": {
                         "id": v["id"], "resort": resort_ed, "local": local_ed,
-                        "apartamento": apartamento_ed, "cota": cota_ed,
+                        "apartamento": apartamento_ed, "andar": andar_ed, "cota": cota_ed,
                         "uh": uh_ed, "tipo_uh": tipo_ed, "contrato": contrato_ed,
                         "observacoes": obs_ed}})
                     st.success("Vínculo atualizado!")
